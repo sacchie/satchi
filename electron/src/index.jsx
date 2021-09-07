@@ -52,7 +52,7 @@ function Notification(props) {
   );
 }
 
-function App({viewModel}) {
+function App({ viewModel }) {
   if (viewModel.typeName === "ViewingState") {
     return (
       <>
@@ -81,10 +81,18 @@ function App({viewModel}) {
 }
 
 fetch(`${URL_MAIN}/notifications`, {
-  headers: { "content-type": "application/json" }
-}).then(resp => resp.json()).then(notifications=> {
-  const viewModel = {typeName: "ViewingState", data: {
-    notifications
-  }}
-  ReactDOM.render(<App viewModel={viewModel} />, document.getElementById("app"));
+  headers: { "content-type": "application/json" },
 })
+  .then((resp) => resp.json())
+  .then((notifications) => {
+    const viewModel = {
+      typeName: "ViewingState",
+      data: {
+        notifications,
+      },
+    };
+    ReactDOM.render(
+      <App viewModel={viewModel} />,
+      document.getElementById("app")
+    );
+  });
