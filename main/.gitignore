@@ -1,5 +1,5 @@
 .idea
-.credential
+src/main/resources/.credential
 
 ### Kotlin ###
 # Compiled class file

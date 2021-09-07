@@ -40,7 +40,7 @@ data class Credential(val personalAccessToken: String) {
     companion object {
         fun load(path: String): Credential {
             val mapper = jacksonObjectMapper()
-            File(path).inputStream().use {
+            object {}.javaClass.classLoader.getResourceAsStream(path).use {
                 return mapper.readValue(it, Credential::class.java)
             }
         }
