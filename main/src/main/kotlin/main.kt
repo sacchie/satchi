@@ -18,11 +18,14 @@ fun main() {
     app.get("/notifications") { ctx ->
         run {
             val notifications = main.github.notifications(credential).map {
+                val sourceUrl = if (it.subject.url != null)
+                    it.subject.url.replace("api.github.com/repos", "github.com").replace("/pulls/", "/pull/")
+                else it.repository.html_url
                 Notification(
                     it.updated_at,
-                    Source(it.repository.name, it.repository.html_url, it.repository.owner.avatar_url),
+                    Source(it.repository.name, sourceUrl, it.repository.owner.avatar_url),
                     "GitHub notification",
-                    "${it.subject.title} ${it.subject.url.orEmpty()}",
+                    it.subject.title,
                     it.reason in listOf("mention", "team_mention")
                 )
             }
