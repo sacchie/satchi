@@ -1,5 +1,6 @@
 plugins {
     kotlin("jvm") version "1.5.10"
+    application
 }
 
 group = "org.example"
@@ -14,4 +15,8 @@ dependencies {
     implementation("io.javalin:javalin:3.13.10")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.13.+")
     implementation("org.slf4j:slf4j-simple:1.7.30")
+}
+
+application {
+    mainClass.set("main.MainKt")
 }
