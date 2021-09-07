@@ -32,7 +32,7 @@ data class Notification(
 ) {
     data class Subject(
         val title: String,
-        val url: String
+        val url: String?
     )
 }
 
