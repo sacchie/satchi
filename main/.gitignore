@@ -1,5 +1,7 @@
 .idea
 src/main/resources/.credential
+src/main/resources/.proxy
+src/main/resources/gateways.yml
 
 ### Kotlin ###
 # Compiled class file

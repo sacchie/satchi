@@ -1,18 +1,16 @@
-package main.github
+package main.client.github
 
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.DeserializationFeature
-import com.fasterxml.jackson.databind.Module
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import java.io.File
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.OffsetDateTime
 
-fun notifications(credential: Credential): List<Notification> {
+fun notifications(credential: Credential): List<GitHubNotification> {
     val mapper = jacksonObjectMapper()
     mapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
     mapper.registerModule(JavaTimeModule())
@@ -24,11 +22,11 @@ fun notifications(credential: Credential): List<Notification> {
         .build()
     val client = HttpClient.newHttpClient()
     val httpResponse = client.send(httpRequest, HttpResponse.BodyHandlers.ofString())
-    val responseTypeRef = object : TypeReference<List<Notification>>() {}
+    val responseTypeRef = object : TypeReference<List<GitHubNotification>>() {}
     return mapper.readValue(httpResponse.body(), responseTypeRef)
 }
 
-data class Notification(
+data class GitHubNotification(
     val id: String,
     val reason: String,
     val updated_at: OffsetDateTime,
@@ -46,13 +44,4 @@ data class Notification(
 
 }
 
-data class Credential(val personalAccessToken: String) {
-    companion object {
-        fun load(path: String): Credential {
-            val mapper = jacksonObjectMapper()
-            javaClass.classLoader.getResourceAsStream(path).use {
-                return mapper.readValue(it, Credential::class.java)
-            }
-        }
-    }
-}
+data class Credential(val personalAccessToken: String)

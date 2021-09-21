@@ -14,8 +14,6 @@ import AppBar from "@material-ui/core/AppBar";
 import Toolbar from "@material-ui/core/Toolbar";
 import Checkbox from "@material-ui/core/Checkbox";
 
-const URL_MAIN = "http://localhost:8037";
-
 function Notification(props) {
   const avatar = props.source.iconUrl ? (
     <Tooltip title={props.source.name}>
@@ -53,7 +51,11 @@ function Notification(props) {
 }
 
 function App({ viewModel }) {
-  if (viewModel.typeName === "ViewingState") {
+  if (viewModel.stateClass === "LoadingState") {
+    return <div>Loading...</div>;
+  }
+
+  if (viewModel.stateClass === "ViewingState") {
     return (
       <>
         <AppBar position="sticky">
@@ -64,12 +66,22 @@ function App({ viewModel }) {
           </Toolbar>
         </AppBar>
         <div>
-          {viewModel.data.notifications.map((n, index) => (
+          {viewModel.stateData.notifications.map((n, index) => (
             <div key={index} style={{ padding: 5 }}>
               <Notification
                 {...n}
                 onOpen={() => window.myAPI.openExternal(n.source.url)}
-                onMark={() => {}}
+                onMark={() =>
+                  ws.send(
+                    JSON.stringify({
+                      op: "MarkAsRead",
+                      args: {
+                        notificationId: n.id,
+                        gatewayId: n.gatewayId,
+                      },
+                    })
+                  )
+                }
               />
             </div>
           ))}
@@ -80,19 +92,16 @@ function App({ viewModel }) {
   return null;
 }
 
-fetch(`${URL_MAIN}/notifications`, {
-  headers: { "content-type": "application/json" },
-})
-  .then((resp) => resp.json())
-  .then((notifications) => {
-    const viewModel = {
-      typeName: "ViewingState",
-      data: {
-        notifications,
-      },
-    };
-    ReactDOM.render(
-      <App viewModel={viewModel} />,
-      document.getElementById("app")
-    );
-  });
+const ws = new WebSocket("ws://localhost:8037/view");
+ws.onmessage = (msg) => {
+  const data = JSON.parse(msg.data);
+  ReactDOM.render(<App viewModel={data} />, document.getElementById("app"));
+};
+
+ws.addEventListener("open", (event) => {
+  ws.send(
+    JSON.stringify({
+      op: "Notifications",
+    })
+  );
+});
