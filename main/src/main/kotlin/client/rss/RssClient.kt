@@ -1,5 +1,6 @@
 package main.client.rss
 
+import com.rometools.rome.feed.synd.SyndEntry
 import com.rometools.rome.io.SyndFeedInput
 import com.rometools.rome.io.XmlReader
 import main.Notification
@@ -12,16 +13,25 @@ import java.time.ZoneOffset
 class RssClient(private val feedUrl: String) : Client {
     override fun fetchNotifications(): List<Notification> {
         val syndFeed = SyndFeedInput().build(XmlReader(URL(feedUrl)))
-        return syndFeed.entries.map {
-            Notification(
-                OffsetDateTime.ofInstant(it.publishedDate.toInstant(), ZoneOffset.UTC),
-                Notification.Source(syndFeed.title, it.link, null),
-                it.title,
-                it.description?.value?:"",
+
+        fun entryToNotification(entry: SyndEntry): Notification {
+            val instant = if (entry.publishedDate != null) {
+                entry.publishedDate.toInstant()
+            } else {
+                entry.updatedDate.toInstant()
+            }
+
+            return Notification(
+                OffsetDateTime.ofInstant(instant, ZoneOffset.UTC),
+                Notification.Source(syndFeed.title, entry.link, null),
+                entry.title,
+                entry.description?.value?:"",
                 false,
-                it.uri
+                entry.uri
             )
         }
+
+        return syndFeed.entries.map(::entryToNotification)
     }
 }
 
