@@ -98,14 +98,13 @@ private fun loadGateways(yamlFilename: String): Map<GatewayId, Gateway> {
         val responseTypeRef = object : TypeReference<List<GatewayDefinition>>() {}
         mapper.readValue(it, responseTypeRef)
     }
-    val urls = gatewayDefinitions.map { it.jarPath }.filter { it != null }.distinct().map { URL("jar:file://$it!/") }
+    val urls = gatewayDefinitions.mapNotNull { it.jarPath }.distinct().map { URL("jar:file://$it!/") }
         .toTypedArray()
     val extendedClassLoader = URLClassLoader(urls, classLoader)
 
     return gatewayDefinitions.mapIndexed { index, def ->
         val clientFactoryClass = extendedClassLoader.loadClass(def.clientFactory)
-        val clientFactory = clientFactoryClass.getDeclaredConstructor().newInstance()
-        when (clientFactory) {
+        when (val clientFactory = clientFactoryClass.getDeclaredConstructor().newInstance()) {
             is ClientFactory -> {
                 val client = clientFactory.createClient(def.args)
                 return@mapIndexed Pair(index.toString(), def.type.create(client))
