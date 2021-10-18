@@ -13,6 +13,7 @@ import java.net.URL
 import java.net.URLClassLoader
 import java.time.OffsetDateTime
 
+data class FilterState(var isMentionOnly: Boolean)
 
 const val MAIN_URL = "http://localhost:8037"
 
@@ -20,16 +21,17 @@ data class ViewModel(val stateClass: String, val stateData: Any?) {
     data class ViewingData(val isMentionOnly: Boolean, val notifications: List<Notification>)
 
     companion object {
-        fun fromState(notificationListState: main.notificationlist.State): ViewModel {
+        fun fromState(notificationListState: main.notificationlist.State, filterState: FilterState): ViewModel {
             val data: Any? = when (notificationListState) {
                 is LoadingState -> null
                 is ViewingState -> {
                     val ntfs = notificationListState.holders.map {
                         it.value.getUnread().map { n -> Notification.from(it.key, n) }
                     }.flatten()
+                        .filter { if (filterState.isMentionOnly) it.mentioned else true }
                         .sortedBy { -it.timestamp.toEpochSecond() }
                     // sort from newest to oldest
-                    ViewingData(false, ntfs)
+                    ViewingData(filterState.isMentionOnly, ntfs)
                 }
                 else -> throw RuntimeException()
             }
@@ -79,7 +81,7 @@ data class ViewModel(val stateClass: String, val stateData: Any?) {
 
 data class Message(val op: OpType, val args: Map<String, Object>?) {
     enum class OpType {
-        Notifications, MarkAsRead
+        Notifications, MarkAsRead, ToggleMentioned
     }
 }
 
@@ -114,6 +116,10 @@ private fun loadGateways(yamlFilename: String): Map<GatewayId, Gateway> {
     }.toMap()
 }
 
+fun toggleMentioned(updateState: ((currentState: FilterState) -> FilterState) -> Unit) {
+    updateState { FilterState(!it.isMentionOnly) }
+}
+
 fun main() {
     val gateways = loadGateways("gateways.yml")
 
@@ -122,20 +128,22 @@ fun main() {
     mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
 
     var notificationListState: State? = null
+    val notificationListStateLock = object {}
 
-    val lock = object {}
+    var filterState = FilterState(false)
+    val filterStateLock = object {}
 
     Javalin.create().apply {
         ws("/view") { ws ->
             ws.onMessage { ctx ->
                 fun sendViewModel() {
                     notificationListState!!.let {
-                        ctx.send(mapper.writeValueAsString(ViewModel.fromState(it)))
+                        ctx.send(mapper.writeValueAsString(ViewModel.fromState(it, filterState)))
                     }
                 }
 
                 fun updateState(stateUpdater: StateUpdater) {
-                    synchronized(lock) {
+                    synchronized(notificationListStateLock) {
                         val prevState = notificationListState?.let {
                             it::class.java
                         }
@@ -158,6 +166,13 @@ fun main() {
                             msg.args["notificationId"].toString(),
                             gateways
                         )
+                    Message.OpType.ToggleMentioned ->
+                        toggleMentioned {
+                            synchronized(filterStateLock) {
+                                filterState = it(filterState)
+                                sendViewModel()
+                            }
+                        }
                 }
             }
         }

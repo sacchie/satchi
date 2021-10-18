@@ -50,7 +50,38 @@ function Notification(props) {
   );
 }
 
-function App({ viewModel }) {
+class Client {
+  constructor(ws) {
+    this.ws = ws;
+  }
+
+  notifications() {
+    this.ws.send(
+      JSON.stringify({
+        op: "Notifications",
+      })
+    );
+  }
+
+  markAsRead(notificationId, gatewayId) {
+    this.ws.send(
+      JSON.stringify({
+        op: "MarkAsRead",
+        args: { notificationId, gatewayId },
+      })
+    );
+  }
+
+  toggleMentioned() {
+    this.ws.send(
+      JSON.stringify({
+        op: "ToggleMentioned",
+      })
+    );
+  }
+}
+
+function App({ client, viewModel }) {
   if (viewModel.stateClass === "LoadingState") {
     return <div>Loading...</div>;
   }
@@ -63,6 +94,14 @@ function App({ viewModel }) {
             <Typography component="h1" variant="h6" color="inherit">
               satchi
             </Typography>
+
+            <Checkbox
+              checked={viewModel.stateData.isMentionOnly}
+              onChange={() => client.toggleMentioned()}
+              name="mention"
+              color="default"
+              inputProps={{ "aria-label": "secondary checkbox" }}
+            />
           </Toolbar>
         </AppBar>
         <div>
@@ -71,17 +110,7 @@ function App({ viewModel }) {
               <Notification
                 {...n}
                 onOpen={() => window.myAPI.openExternal(n.source.url)}
-                onMark={() =>
-                  ws.send(
-                    JSON.stringify({
-                      op: "MarkAsRead",
-                      args: {
-                        notificationId: n.id,
-                        gatewayId: n.gatewayId,
-                      },
-                    })
-                  )
-                }
+                onMark={() => client.markAsRead(n.id, n.gatewayId)}
               />
             </div>
           ))}
@@ -93,15 +122,16 @@ function App({ viewModel }) {
 }
 
 const ws = new WebSocket("ws://localhost:8037/view");
+const client = new Client(ws);
+
 ws.onmessage = (msg) => {
   const data = JSON.parse(msg.data);
-  ReactDOM.render(<App viewModel={data} />, document.getElementById("app"));
+  ReactDOM.render(
+    <App client={client} viewModel={data} />,
+    document.getElementById("app")
+  );
 };
 
 ws.addEventListener("open", (event) => {
-  ws.send(
-    JSON.stringify({
-      op: "Notifications",
-    })
-  );
+  client.notifications();
 });
