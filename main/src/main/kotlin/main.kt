@@ -8,10 +8,12 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import io.javalin.Javalin
+import io.javalin.websocket.WsContext
 import main.notificationlist.*
 import java.net.URL
 import java.net.URLClassLoader
 import java.time.OffsetDateTime
+import java.util.concurrent.ConcurrentHashMap
 
 data class FilterState(var isMentionOnly: Boolean)
 
@@ -79,11 +81,18 @@ data class ViewModel(val stateClass: String, val stateData: Any?) {
     }
 }
 
-data class Message(val op: OpType, val args: Map<String, Object>?) {
+data class InMessage(val op: OpType, val args: Map<String, Object>?) {
     enum class OpType {
         Notifications, MarkAsRead, ToggleMentioned
     }
 }
+
+data class OutMessage(val type: Type, val value: Any) {
+    enum class Type {
+        UpdateView, ShowDesktopNotification
+    }
+}
+
 
 data class GatewayDefinition(
     val clientFactory: String,
@@ -133,47 +142,55 @@ fun main() {
     var filterState = FilterState(false)
     val filterStateLock = object {}
 
+    val stateUpdateHandlerMap = ConcurrentHashMap<WsContext, () -> Unit>()
+
+    fun updateState(stateUpdater: StateUpdater) {
+        synchronized(notificationListStateLock) {
+            val prevState = notificationListState?.let {
+                it::class.java
+            }
+            notificationListState = stateUpdater(notificationListState)
+            val nextState = notificationListState?.let {
+                it::class.java
+            }
+            System.err.println("${prevState} -> ${nextState}")
+        }
+        stateUpdateHandlerMap.forEach { it.value() }
+    }
+
     Javalin.create().apply {
-        ws("/view") { ws ->
-            ws.onMessage { ctx ->
-                fun sendViewModel() {
+        ws("/connect") { ws ->
+            ws.onConnect { ctx ->
+                stateUpdateHandlerMap[ctx] = {
                     notificationListState!!.let {
-                        ctx.send(mapper.writeValueAsString(ViewModel.fromState(it, filterState)))
+                        ctx.send(mapper.writeValueAsString(OutMessage(OutMessage.Type.UpdateView, ViewModel.fromState(it, filterState))))
                     }
                 }
-
-                fun updateState(stateUpdater: StateUpdater) {
-                    synchronized(notificationListStateLock) {
-                        val prevState = notificationListState?.let {
-                            it::class.java
-                        }
-                        notificationListState = stateUpdater(notificationListState)
-                        val nextState = notificationListState?.let {
-                            it::class.java
-                        }
-                        System.err.println("${prevState} -> ${nextState}")
-                    }
-                    sendViewModel()
-                }
-
-                val msg = mapper.readValue(ctx.message(), Message::class.java)
+                System.err.println("/view Opened (# of contexts=${stateUpdateHandlerMap.size})")
+            }
+            ws.onMessage { ctx ->
+                val msg = mapper.readValue(ctx.message(), InMessage::class.java)
                 when (msg.op) {
-                    Message.OpType.Notifications -> viewLatest(::updateState, gateways)
-                    Message.OpType.MarkAsRead ->
+                    InMessage.OpType.Notifications -> viewLatest(::updateState, gateways)
+                    InMessage.OpType.MarkAsRead ->
                         markAsRead(
                             ::updateState,
                             msg.args!!["gatewayId"].toString(),
                             msg.args["notificationId"].toString(),
                             gateways
                         )
-                    Message.OpType.ToggleMentioned ->
+                    InMessage.OpType.ToggleMentioned ->
                         toggleMentioned {
                             synchronized(filterStateLock) {
                                 filterState = it(filterState)
-                                sendViewModel()
+                                stateUpdateHandlerMap.forEach { it.value() }
                             }
                         }
                 }
+            }
+            ws.onClose { ctx ->
+                stateUpdateHandlerMap.remove(ctx)
+                System.err.println("/view Closed (# of contexts=${stateUpdateHandlerMap.size})")
             }
         }
 
@@ -187,4 +204,14 @@ fun main() {
             }
         }
     }.start(8037) /* 37 = "サッチ" */
+
+    kotlin.concurrent.timer(null, false, 0, 15*1000, {
+        System.err.println("timer fired")
+        // fetch
+        // check for new mentioned notifications
+        // send desktop ntf if exists
+        stateUpdateHandlerMap.forEach{
+            it.key.send(mapper.writeValueAsString(OutMessage(OutMessage.Type.ShowDesktopNotification, "hoge")))
+        }
+    })
 }
