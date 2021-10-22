@@ -45,18 +45,19 @@ fun viewLatest(updateState: (stateUpdater: StateUpdater) -> Unit, gateways: Map<
         }
     }
 
-    gateways.forEach{ (gatewayId, gateway) ->
+    gateways.forEach { (gatewayId, gateway) ->
         val fetched = gateway.fetchNotifications()
 
         updateState { currentState ->
             when (currentState) {
                 is LoadingState -> ViewingState(
                     gateways.map {
-                    if (it.key == gatewayId) {
-                        Pair(it.key, it.value.makeHolder().addToUnread(fetched))
-                    } else
-                        Pair(it.key, it.value.makeHolder())
-                    }.toMap())
+                        if (it.key == gatewayId) {
+                            Pair(it.key, it.value.makeHolder().addToUnread(fetched))
+                        } else
+                            Pair(it.key, it.value.makeHolder())
+                    }.toMap()
+                )
                 is ViewingState -> ViewingState(
                     currentState.holders.map {
                         if (it.key == gatewayId) {
@@ -73,7 +74,7 @@ fun viewLatest(updateState: (stateUpdater: StateUpdater) -> Unit, gateways: Map<
 }
 
 fun viewLatestMentioned(updateState: (stateUpdater: StateUpdater) -> Unit, gateways: Map<GatewayId, Gateway>) {
-    gateways.forEach{ (gatewayId, gateway) ->
+    gateways.forEach { (gatewayId, gateway) ->
         val fetched = gateway.fetchNotifications()
 
         updateState { currentState ->
@@ -84,7 +85,8 @@ fun viewLatestMentioned(updateState: (stateUpdater: StateUpdater) -> Unit, gatew
                             Pair(it.key, it.value.makeHolder().addToUnread(fetched))
                         } else
                             Pair(it.key, it.value.makeHolder())
-                    }.toMap())
+                    }.toMap()
+                )
                 is ViewingState -> ViewingState(
                     currentState.holders.map {
                         if (it.key == gatewayId) {
@@ -146,7 +148,7 @@ private class ManagedGateway(
 }
 
 // 未読既読管理してくれないClient用
-private class UnmanagedGateway (
+private class UnmanagedGateway(
     client: Client
 ) : Gateway(client) {
     data class Holder(

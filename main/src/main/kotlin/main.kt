@@ -67,7 +67,7 @@ data class ViewModel(val stateClass: String, val stateData: Any?) {
                         n.source.url,
                         when (n.source.icon) {
                             is main.Notification.Icon.Public -> n.source.icon.iconUrl
-                            is main.Notification.Icon.Private -> "${MAIN_URL}/icon?gatewayId=${gatewayId}&iconId=${n.source.icon.iconId}"
+                            is main.Notification.Icon.Private -> "$MAIN_URL/icon?gatewayId=$gatewayId&iconId=${n.source.icon.iconId}"
                             null -> null
                             else -> throw RuntimeException()
                         }
@@ -158,7 +158,7 @@ fun main() {
             val nextState = notificationListState?.let {
                 it::class.java
             }
-            System.err.println("${prevState} -> ${nextState}")
+            System.err.println("$prevState -> $nextState")
         }
         stateUpdateHandlerMap.forEach { it.value() }
     }
@@ -172,15 +172,18 @@ fun main() {
                 val after = newState.holders[gatewayId]!!
                 val before = it.value
                 after.fetched - before.fetched
-            }.filter { it.timestamp > now.minusMinutes(5)}
+            }.filter { it.timestamp > now.minusMinutes(5) }
 
-            toSend.forEach {notification ->
+            toSend.forEach { notification ->
                 stateUpdateHandlerMap.forEach {
-                    val outMessage = OutMessage(OutMessage.Type.ShowDesktopNotification, mapOf(
-                        Pair("title", "${notification.source.name}: ${notification.title}"),
-                        Pair("body", notification.message),
-                        Pair("url", notification.source.url),
-                    ))
+                    val outMessage = OutMessage(
+                        OutMessage.Type.ShowDesktopNotification,
+                        mapOf(
+                            Pair("title", "${notification.source.name}: ${notification.title}"),
+                            Pair("body", notification.message),
+                            Pair("url", notification.source.url),
+                        )
+                    )
                     it.key.send(mapper.writeValueAsString(outMessage))
                 }
             }

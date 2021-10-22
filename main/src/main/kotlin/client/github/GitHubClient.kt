@@ -1,8 +1,8 @@
 package main.client.github
 
-import main.Notification
 import main.Client
 import main.ClientFactory
+import main.Notification
 
 class GitHubClient(private val credential: Credential) : Client {
     override fun fetchNotifications(): List<Notification> = notifications(credential).map {

@@ -1,6 +1,7 @@
 plugins {
     kotlin("jvm") version "1.5.10"
     application
+    id("com.diffplug.spotless") version "5.17.0"
 }
 
 group = "org.example"
@@ -18,6 +19,12 @@ dependencies {
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.12.5")
     implementation("org.slf4j:slf4j-simple:1.7.30")
     implementation("com.rometools:rome:1.16.0")
+}
+
+spotless {
+    kotlin {
+        ktlint().userData(mapOf("disabled_rules" to "no-wildcard-imports"))
+    }
 }
 
 application {
