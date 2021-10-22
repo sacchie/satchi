@@ -9,10 +9,12 @@ import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import io.javalin.Javalin
 import io.javalin.websocket.WsContext
+import main.desktopnotification.sendLatestMentioned
 import main.notificationlist.*
 import java.net.URL
 import java.net.URLClassLoader
 import java.time.OffsetDateTime
+import java.time.ZoneOffset
 import java.util.concurrent.ConcurrentHashMap
 
 data class FilterState(var isMentionOnly: Boolean)
@@ -93,7 +95,6 @@ data class OutMessage(val type: Type, val value: Any) {
     }
 }
 
-
 data class GatewayDefinition(
     val clientFactory: String,
     val args: Map<String, String>,
@@ -139,6 +140,10 @@ fun main() {
     var notificationListState: State? = null
     val notificationListStateLock = object {}
 
+    var desktopNotificationListState =
+        main.desktopnotification.State(gateways.map { Pair(it.key, main.desktopnotification.SentNotificationHolder(listOf())) }.toMap())
+    val desktopNotificationStateLock = object {}
+
     var filterState = FilterState(false)
     val filterStateLock = object {}
 
@@ -158,12 +163,46 @@ fun main() {
         stateUpdateHandlerMap.forEach { it.value() }
     }
 
+    fun updateDesktopNotificationState(stateUpdater: main.desktopnotification.StateUpdater) {
+        synchronized(desktopNotificationStateLock) {
+            val newState = stateUpdater(desktopNotificationListState)
+            val now = OffsetDateTime.now(ZoneOffset.UTC)
+            val toSend = desktopNotificationListState.holders.flatMap {
+                val gatewayId = it.key
+                val after = newState.holders[gatewayId]!!
+                val before = it.value
+                after.fetched - before.fetched
+            }.filter { it.timestamp > now.minusMinutes(5)}
+
+            toSend.forEach {notification ->
+                stateUpdateHandlerMap.forEach {
+                    val outMessage = OutMessage(OutMessage.Type.ShowDesktopNotification, mapOf(
+                        Pair("title", "${notification.source.name}: ${notification.title}"),
+                        Pair("body", notification.message),
+                        Pair("url", notification.source.url),
+                    ))
+                    it.key.send(mapper.writeValueAsString(outMessage))
+                }
+            }
+
+            desktopNotificationListState = newState
+        }
+        stateUpdateHandlerMap.forEach { it.value() }
+    }
+
     Javalin.create().apply {
         ws("/connect") { ws ->
             ws.onConnect { ctx ->
                 stateUpdateHandlerMap[ctx] = {
                     notificationListState!!.let {
-                        ctx.send(mapper.writeValueAsString(OutMessage(OutMessage.Type.UpdateView, ViewModel.fromState(it, filterState))))
+                        ctx.send(
+                            mapper.writeValueAsString(
+                                OutMessage(
+                                    OutMessage.Type.UpdateView,
+                                    ViewModel.fromState(it, filterState)
+                                )
+                            )
+                        )
                     }
                 }
                 System.err.println("/view Opened (# of contexts=${stateUpdateHandlerMap.size})")
@@ -205,13 +244,8 @@ fun main() {
         }
     }.start(8037) /* 37 = "サッチ" */
 
-    kotlin.concurrent.timer(null, false, 0, 15*1000, {
+    kotlin.concurrent.timer(null, false, 0, 15 * 1000) {
         System.err.println("timer fired")
-        // fetch
-        // check for new mentioned notifications
-        // send desktop ntf if exists
-        stateUpdateHandlerMap.forEach{
-            it.key.send(mapper.writeValueAsString(OutMessage(OutMessage.Type.ShowDesktopNotification, "hoge")))
-        }
-    })
+        sendLatestMentioned(::updateDesktopNotificationState, gateways.map { Pair(it.key, it.value.client) }.toMap())
+    }
 }

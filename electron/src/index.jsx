@@ -126,7 +126,7 @@ const client = new Client(ws);
 
 ws.onmessage = (msg) => {
   const outMessage = JSON.parse(msg.data);
-  switch(outMessage.type) {
+  switch (outMessage.type) {
     case "UpdateView":
       ReactDOM.render(
         <App client={client} viewModel={outMessage.value} />,
@@ -134,12 +134,12 @@ ws.onmessage = (msg) => {
       );
       break;
     case "ShowDesktopNotification":
-      new Notification(outMessage.value, {
-        body: outMessage.value,
+      new Notification(outMessage.value.title, {
+        body: outMessage.value.body,
       }).onclick = (event) => {
-        shell.openExternal("example.com");
+        window.myAPI.openExternal(outMessage.value.url);
       };
-      console.log("ShowDesktopNotification");
+      console.log("ShowDesktopNotification", outMessage);
       break;
   }
 };
