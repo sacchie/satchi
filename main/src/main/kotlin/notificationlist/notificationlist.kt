@@ -6,7 +6,7 @@ import main.Notification
 import main.NotificationId
 import java.io.InputStream
 
-typealias StateUpdater = (currentState: State?) -> State
+typealias StateUpdater = (currentState: State) -> State
 
 interface State
 
@@ -18,6 +18,7 @@ interface NotificationHolder {
     fun read(id: NotificationId): NotificationHolder
 }
 
+class NullState : State
 data class LoadingState(val holders: Map<GatewayId, NotificationHolder>) : State
 data class ViewingState(val holders: Map<GatewayId, NotificationHolder>) : State
 
@@ -38,9 +39,9 @@ abstract class Gateway(val client: Client) {
 fun viewLatest(updateState: (stateUpdater: StateUpdater) -> Unit, gateways: Map<GatewayId, Gateway>) {
     updateState { currentState ->
         when (currentState) {
+            is NullState -> LoadingState(gateways.map { it.key to it.value.makeHolder() }.toMap())
             is LoadingState -> currentState
             is ViewingState -> LoadingState(currentState.holders)
-            null -> LoadingState(gateways.map { it.key to it.value.makeHolder() }.toMap())
             else -> throw IllegalStateException()
         }
     }
@@ -50,6 +51,7 @@ fun viewLatest(updateState: (stateUpdater: StateUpdater) -> Unit, gateways: Map<
 
         updateState { currentState ->
             when (currentState) {
+                is NullState -> ViewingState(mapOf(Pair(gatewayId, gateway.makeHolder().addToUnread(fetched))))
                 is LoadingState -> ViewingState(
                     gateways.map {
                         if (it.key == gatewayId) {
@@ -66,36 +68,6 @@ fun viewLatest(updateState: (stateUpdater: StateUpdater) -> Unit, gateways: Map<
                             Pair(it.key, it.value)
                     }.toMap()
                 )
-                null -> ViewingState(mapOf(Pair(gatewayId, gateway.makeHolder().addToUnread(fetched))))
-                else -> throw IllegalStateException()
-            }
-        }
-    }
-}
-
-fun viewLatestMentioned(updateState: (stateUpdater: StateUpdater) -> Unit, gateways: Map<GatewayId, Gateway>) {
-    gateways.forEach { (gatewayId, gateway) ->
-        val fetched = gateway.fetchNotifications()
-
-        updateState { currentState ->
-            when (currentState) {
-                is LoadingState -> ViewingState(
-                    gateways.map {
-                        if (it.key == gatewayId) {
-                            Pair(it.key, it.value.makeHolder().addToUnread(fetched))
-                        } else
-                            Pair(it.key, it.value.makeHolder())
-                    }.toMap()
-                )
-                is ViewingState -> ViewingState(
-                    currentState.holders.map {
-                        if (it.key == gatewayId) {
-                            Pair(it.key, it.value.addToUnread(fetched))
-                        } else
-                            Pair(it.key, it.value)
-                    }.toMap()
-                )
-                null -> ViewingState(mapOf(Pair(gatewayId, gateway.makeHolder().addToUnread(fetched))))
                 else -> throw IllegalStateException()
             }
         }
