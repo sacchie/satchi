@@ -41,7 +41,6 @@ data class GitHubNotification(
     data class Repository(val name: String, val html_url: String, val owner: Owner) {
         data class Owner(val avatar_url: String)
     }
-
 }
 
 data class Credential(val personalAccessToken: String)

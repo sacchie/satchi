@@ -3,9 +3,9 @@ package main.client.rss
 import com.rometools.rome.feed.synd.SyndEntry
 import com.rometools.rome.io.SyndFeedInput
 import com.rometools.rome.io.XmlReader
-import main.Notification
 import main.Client
 import main.ClientFactory
+import main.Notification
 import java.net.URL
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
@@ -25,7 +25,7 @@ class RssClient(private val feedUrl: String) : Client {
                 OffsetDateTime.ofInstant(instant, ZoneOffset.UTC),
                 Notification.Source(syndFeed.title, entry.link, null),
                 entry.title,
-                entry.description?.value?:"",
+                entry.description?.value ?: "",
                 false,
                 entry.uri
             )

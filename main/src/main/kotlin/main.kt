@@ -10,78 +10,14 @@ import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import io.javalin.Javalin
 import io.javalin.websocket.WsContext
 import main.desktopnotification.sendLatestMentioned
-import main.notificationlist.*
+import main.filter.toggleMentioned
+import main.notificationlist.markAsRead
+import main.notificationlist.viewLatest
 import java.net.URL
 import java.net.URLClassLoader
-import java.time.OffsetDateTime
-import java.time.ZoneOffset
-import java.util.concurrent.ConcurrentHashMap
-
-data class FilterState(var isMentionOnly: Boolean)
+import java.util.*
 
 const val MAIN_URL = "http://localhost:8037"
-
-data class ViewModel(val stateClass: String, val stateData: Any?) {
-    data class ViewingData(val isMentionOnly: Boolean, val notifications: List<Notification>)
-
-    companion object {
-        fun fromState(notificationListState: main.notificationlist.State, filterState: FilterState): ViewModel {
-            val data: Any? = when (notificationListState) {
-                is LoadingState -> null
-                is ViewingState -> {
-                    val ntfs = notificationListState.holders.map {
-                        it.value.getUnread().map { n -> Notification.from(it.key, n) }
-                    }.flatten()
-                        .filter { if (filterState.isMentionOnly) it.mentioned else true }
-                        .sortedBy { -it.timestamp.toEpochSecond() }
-                    // sort from newest to oldest
-                    ViewingData(filterState.isMentionOnly, ntfs)
-                }
-                else -> throw RuntimeException()
-            }
-            return ViewModel(notificationListState.javaClass.simpleName, data)
-        }
-    }
-
-    data class Notification(
-        val timestamp: OffsetDateTime,
-        val source: Source,
-        val title: String,
-        val message: String,
-        val mentioned: Boolean,
-        val gatewayId: GatewayId,
-        val id: String,
-    ) {
-        data class Source(
-            val name: String,
-            val url: String,
-            val iconUrl: String?
-        )
-
-        companion object {
-            fun from(gatewayId: GatewayId, n: main.Notification): Notification {
-                return Notification(
-                    n.timestamp,
-                    Source(
-                        n.source.name,
-                        n.source.url,
-                        when (n.source.icon) {
-                            is main.Notification.Icon.Public -> n.source.icon.iconUrl
-                            is main.Notification.Icon.Private -> "${MAIN_URL}/icon?gatewayId=${gatewayId}&iconId=${n.source.icon.iconId}"
-                            null -> null
-                            else -> throw RuntimeException()
-                        }
-                    ),
-                    n.title,
-                    n.message,
-                    n.mentioned,
-                    gatewayId,
-                    n.id
-                )
-            }
-        }
-    }
-}
 
 data class InMessage(val op: OpType, val args: Map<String, Object>?) {
     enum class OpType {
@@ -98,11 +34,11 @@ data class OutMessage(val type: Type, val value: Any) {
 data class GatewayDefinition(
     val clientFactory: String,
     val args: Map<String, String>,
-    val type: GatewayFactory,
+    val type: main.notificationlist.GatewayFactory,
     val jarPath: String?
 )
 
-private fun loadGateways(yamlFilename: String): Map<GatewayId, Gateway> {
+private fun loadGateways(yamlFilename: String): Map<GatewayId, main.notificationlist.Gateway> {
     val mapper = ObjectMapper(YAMLFactory())
     mapper.registerKotlinModule()
     val classLoader = object {}.javaClass.classLoader
@@ -126,8 +62,21 @@ private fun loadGateways(yamlFilename: String): Map<GatewayId, Gateway> {
     }.toMap()
 }
 
-fun toggleMentioned(updateState: ((currentState: FilterState) -> FilterState) -> Unit) {
-    updateState { FilterState(!it.isMentionOnly) }
+typealias Gateways = Map<GatewayId, main.notificationlist.Gateway>
+
+class Service(private val state: State, private val gateways: Gateways) {
+    fun viewLatest() = viewLatest(state::update, gateways)
+    fun markAsRead(gatewayId: GatewayId, notificationId: NotificationId) =
+        markAsRead(
+            state::update,
+            gatewayId,
+            notificationId,
+            gateways
+        )
+
+    fun toggleMentioned() = toggleMentioned(state::update)
+    fun sendLatestMentioned() =
+        sendLatestMentioned(state::update, gateways.map { Pair(it.key, it.value.client) }.toMap())
 }
 
 fun main() {
@@ -137,99 +86,71 @@ fun main() {
     mapper.registerModule(JavaTimeModule()) // timezoneを明示的に指定したほうがよさそう
     mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
 
-    var notificationListState: State? = null
-    val notificationListStateLock = object {}
+    val webSocketContexts = Collections.synchronizedList(mutableListOf<WsContext>())
 
-    var desktopNotificationListState =
-        main.desktopnotification.State(gateways.map { Pair(it.key, main.desktopnotification.SentNotificationHolder(listOf())) }.toMap())
-    val desktopNotificationStateLock = object {}
-
-    var filterState = FilterState(false)
-    val filterStateLock = object {}
-
-    val stateUpdateHandlerMap = ConcurrentHashMap<WsContext, () -> Unit>()
-
-    fun updateState(stateUpdater: StateUpdater) {
-        synchronized(notificationListStateLock) {
-            val prevState = notificationListState?.let {
-                it::class.java
+    val state = State(
+        main.notificationlist.NullState(),
+        main.filter.State(false),
+        main.desktopnotification.State(
+            gateways.map {
+                Pair(
+                    it.key,
+                    main.desktopnotification.SentNotificationHolder(listOf())
+                )
+            }.toMap()
+        ),
+        sendViewModel = { notificationListState, filterState ->
+            webSocketContexts.forEach { ctx ->
+                val outMessage = OutMessage(
+                    OutMessage.Type.UpdateView,
+                    ViewModel.fromState(notificationListState, filterState)
+                )
+                ctx.send(
+                    mapper.writeValueAsString(outMessage)
+                )
             }
-            notificationListState = stateUpdater(notificationListState)
-            val nextState = notificationListState?.let {
-                it::class.java
-            }
-            System.err.println("${prevState} -> ${nextState}")
-        }
-        stateUpdateHandlerMap.forEach { it.value() }
-    }
-
-    fun updateDesktopNotificationState(stateUpdater: main.desktopnotification.StateUpdater) {
-        synchronized(desktopNotificationStateLock) {
-            val newState = stateUpdater(desktopNotificationListState)
-            val now = OffsetDateTime.now(ZoneOffset.UTC)
-            val toSend = desktopNotificationListState.holders.flatMap {
-                val gatewayId = it.key
-                val after = newState.holders[gatewayId]!!
-                val before = it.value
-                after.fetched - before.fetched
-            }.filter { it.timestamp > now.minusMinutes(5)}
-
-            toSend.forEach {notification ->
-                stateUpdateHandlerMap.forEach {
-                    val outMessage = OutMessage(OutMessage.Type.ShowDesktopNotification, mapOf(
-                        Pair("title", "${notification.source.name}: ${notification.title}"),
-                        Pair("body", notification.message),
-                        Pair("url", notification.source.url),
-                    ))
-                    it.key.send(mapper.writeValueAsString(outMessage))
+        },
+        sendDesktopNotification = { notifications ->
+            notifications.forEach { notification ->
+                webSocketContexts.forEach { ctx ->
+                    val outMessage = OutMessage(
+                        OutMessage.Type.ShowDesktopNotification,
+                        mapOf(
+                            Pair("title", "${notification.source.name}: ${notification.title}"),
+                            Pair("body", notification.message),
+                            Pair("url", notification.source.url),
+                        )
+                    )
+                    ctx.send(mapper.writeValueAsString(outMessage))
                 }
             }
-
-            desktopNotificationListState = newState
         }
-        stateUpdateHandlerMap.forEach { it.value() }
-    }
+    )
+
+    val service = Service(state, gateways)
 
     Javalin.create().apply {
         ws("/connect") { ws ->
             ws.onConnect { ctx ->
-                stateUpdateHandlerMap[ctx] = {
-                    notificationListState!!.let {
-                        ctx.send(
-                            mapper.writeValueAsString(
-                                OutMessage(
-                                    OutMessage.Type.UpdateView,
-                                    ViewModel.fromState(it, filterState)
-                                )
-                            )
-                        )
-                    }
-                }
-                System.err.println("/view Opened (# of contexts=${stateUpdateHandlerMap.size})")
+                webSocketContexts.add(ctx)
+                System.err.println("/view Opened (# of contexts=${webSocketContexts.size})")
             }
             ws.onMessage { ctx ->
                 val msg = mapper.readValue(ctx.message(), InMessage::class.java)
                 when (msg.op) {
-                    InMessage.OpType.Notifications -> viewLatest(::updateState, gateways)
+                    InMessage.OpType.Notifications -> service.viewLatest()
                     InMessage.OpType.MarkAsRead ->
-                        markAsRead(
-                            ::updateState,
+                        service.markAsRead(
                             msg.args!!["gatewayId"].toString(),
                             msg.args["notificationId"].toString(),
-                            gateways
                         )
                     InMessage.OpType.ToggleMentioned ->
-                        toggleMentioned {
-                            synchronized(filterStateLock) {
-                                filterState = it(filterState)
-                                stateUpdateHandlerMap.forEach { it.value() }
-                            }
-                        }
+                        service.toggleMentioned()
                 }
             }
             ws.onClose { ctx ->
-                stateUpdateHandlerMap.remove(ctx)
-                System.err.println("/view Closed (# of contexts=${stateUpdateHandlerMap.size})")
+                webSocketContexts.remove(ctx)
+                System.err.println("/view Closed (# of contexts=${webSocketContexts.size})")
             }
         }
 
@@ -246,6 +167,6 @@ fun main() {
 
     kotlin.concurrent.timer(null, false, 0, 15 * 1000) {
         System.err.println("timer fired")
-        sendLatestMentioned(::updateDesktopNotificationState, gateways.map { Pair(it.key, it.value.client) }.toMap())
+        service.sendLatestMentioned()
     }
 }
