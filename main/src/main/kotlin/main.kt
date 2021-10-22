@@ -15,73 +15,9 @@ import main.notificationlist.markAsRead
 import main.notificationlist.viewLatest
 import java.net.URL
 import java.net.URLClassLoader
-import java.time.OffsetDateTime
-import java.time.ZoneOffset
 import java.util.*
 
 const val MAIN_URL = "http://localhost:8037"
-
-data class ViewModel(val stateClass: String, val stateData: Any?) {
-    data class ViewingData(val isMentionOnly: Boolean, val notifications: List<Notification>)
-
-    companion object {
-        fun fromState(notificationListState: main.notificationlist.State, filterState: main.filter.State): ViewModel {
-            val data: Any? = when (notificationListState) {
-                is main.notificationlist.LoadingState -> null
-                is main.notificationlist.ViewingState -> {
-                    val ntfs = notificationListState.holders.flatMap {
-                        it.value.getUnread().map { n -> Notification.from(it.key, n) }
-                    }
-                        .filter { if (filterState.isMentionOnly) it.mentioned else true }
-                        .sortedBy { -it.timestamp.toEpochSecond() }
-                    // sort from newest to oldest
-                    ViewingData(filterState.isMentionOnly, ntfs)
-                }
-                else -> throw RuntimeException()
-            }
-            return ViewModel(notificationListState.javaClass.simpleName, data)
-        }
-    }
-
-    data class Notification(
-        val timestamp: OffsetDateTime,
-        val source: Source,
-        val title: String,
-        val message: String,
-        val mentioned: Boolean,
-        val gatewayId: GatewayId,
-        val id: String,
-    ) {
-        data class Source(
-            val name: String,
-            val url: String,
-            val iconUrl: String?
-        )
-
-        companion object {
-            fun from(gatewayId: GatewayId, n: main.Notification): Notification {
-                return Notification(
-                    n.timestamp,
-                    Source(
-                        n.source.name,
-                        n.source.url,
-                        when (n.source.icon) {
-                            is main.Notification.Icon.Public -> n.source.icon.iconUrl
-                            is main.Notification.Icon.Private -> "$MAIN_URL/icon?gatewayId=$gatewayId&iconId=${n.source.icon.iconId}"
-                            null -> null
-                            else -> throw RuntimeException()
-                        }
-                    ),
-                    n.title,
-                    n.message,
-                    n.mentioned,
-                    gatewayId,
-                    n.id
-                )
-            }
-        }
-    }
-}
 
 data class InMessage(val op: OpType, val args: Map<String, Object>?) {
     enum class OpType {
@@ -126,54 +62,6 @@ private fun loadGateways(yamlFilename: String): Map<GatewayId, main.notification
     }.toMap()
 }
 
-typealias StateUpdater<S> = (currentState: S) -> S
-
-class State(
-    var notificationListState: main.notificationlist.State,
-    var filterState: main.filter.State,
-    var desktopNotificationListState: main.desktopnotification.State,
-    val sendViewModel: (
-        notificationListState: main.notificationlist.State,
-        filterState: main.filter.State,
-    ) -> Unit,
-    val sendDesktopNotification: (
-        notifications: List<Notification>
-    ) -> Unit,
-) {
-    @Synchronized
-    @JvmName("updateNotificationList")
-    fun update(stateUpdater: StateUpdater<main.notificationlist.State>) {
-        val prevState = notificationListState::class.java
-        notificationListState = stateUpdater(notificationListState)
-        val nextState = notificationListState::class.java
-        System.err.println("$prevState -> $nextState")
-        sendViewModel(notificationListState, filterState)
-    }
-
-    @Synchronized
-    @JvmName("updateFilter")
-    fun update(stateUpdater: StateUpdater<main.filter.State>) {
-        filterState = stateUpdater(filterState)
-        sendViewModel(notificationListState, filterState)
-    }
-
-    @Synchronized
-    @JvmName("updateDesktopNotification")
-    fun update(stateUpdater: StateUpdater<main.desktopnotification.State>) {
-        val newState = stateUpdater(desktopNotificationListState)
-        val now = OffsetDateTime.now(ZoneOffset.UTC)
-        val toSend = desktopNotificationListState.holders.flatMap {
-            val gatewayId = it.key
-            val after = newState.holders[gatewayId]!!
-            val before = it.value
-            after.fetched - before.fetched
-        }.filter { it.timestamp > now.minusMinutes(5) }
-        sendDesktopNotification(toSend)
-
-        desktopNotificationListState = newState
-    }
-}
-
 fun main() {
     val gateways = loadGateways("gateways.yml")
 
@@ -194,7 +82,7 @@ fun main() {
                 )
             }.toMap()
         ),
-        { notificationListState, filterState ->
+        sendViewModel = { notificationListState, filterState ->
             webSocketContexts.forEach { ctx ->
                 val outMessage = OutMessage(
                     OutMessage.Type.UpdateView,
@@ -205,7 +93,7 @@ fun main() {
                 )
             }
         },
-        { notifications ->
+        sendDesktopNotification = { notifications ->
             notifications.forEach { notification ->
                 webSocketContexts.forEach { ctx ->
                     val outMessage = OutMessage(
