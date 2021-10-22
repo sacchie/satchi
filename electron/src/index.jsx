@@ -14,7 +14,7 @@ import AppBar from "@material-ui/core/AppBar";
 import Toolbar from "@material-ui/core/Toolbar";
 import Checkbox from "@material-ui/core/Checkbox";
 
-function Notification(props) {
+function NotificationCard(props) {
   const avatar = props.source.iconUrl ? (
     <Tooltip title={props.source.name}>
       <Avatar src={props.source.iconUrl} alt={props.source.name} />
@@ -107,7 +107,7 @@ function App({ client, viewModel }) {
         <div>
           {viewModel.stateData.notifications.map((n, index) => (
             <div key={index} style={{ padding: 5 }}>
-              <Notification
+              <NotificationCard
                 {...n}
                 onOpen={() => window.myAPI.openExternal(n.source.url)}
                 onMark={() => client.markAsRead(n.id, n.gatewayId)}
@@ -121,15 +121,27 @@ function App({ client, viewModel }) {
   return null;
 }
 
-const ws = new WebSocket("ws://localhost:8037/view");
+const ws = new WebSocket("ws://localhost:8037/connect");
 const client = new Client(ws);
 
 ws.onmessage = (msg) => {
-  const data = JSON.parse(msg.data);
-  ReactDOM.render(
-    <App client={client} viewModel={data} />,
-    document.getElementById("app")
-  );
+  const outMessage = JSON.parse(msg.data);
+  switch (outMessage.type) {
+    case "UpdateView":
+      ReactDOM.render(
+        <App client={client} viewModel={outMessage.value} />,
+        document.getElementById("app")
+      );
+      break;
+    case "ShowDesktopNotification":
+      new Notification(outMessage.value.title, {
+        body: outMessage.value.body,
+      }).onclick = (event) => {
+        window.myAPI.openExternal(outMessage.value.url);
+      };
+      console.log("ShowDesktopNotification", outMessage);
+      break;
+  }
 };
 
 ws.addEventListener("open", (event) => {
