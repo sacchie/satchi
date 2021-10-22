@@ -62,6 +62,23 @@ private fun loadGateways(yamlFilename: String): Map<GatewayId, main.notification
     }.toMap()
 }
 
+typealias Gateways = Map<GatewayId, main.notificationlist.Gateway>
+
+class Service(private val state: State, private val gateways: Gateways) {
+    fun viewLatest() = viewLatest(state::update, gateways)
+    fun markAsRead(gatewayId: GatewayId, notificationId: NotificationId) =
+        markAsRead(
+            state::update,
+            gatewayId,
+            notificationId,
+            gateways
+        )
+
+    fun toggleMentioned() = toggleMentioned(state::update)
+    fun sendLatestMentioned() =
+        sendLatestMentioned(state::update, gateways.map { Pair(it.key, it.value.client) }.toMap())
+}
+
 fun main() {
     val gateways = loadGateways("gateways.yml")
 
@@ -110,6 +127,8 @@ fun main() {
         }
     )
 
+    val service = Service(state, gateways)
+
     Javalin.create().apply {
         ws("/connect") { ws ->
             ws.onConnect { ctx ->
@@ -119,16 +138,14 @@ fun main() {
             ws.onMessage { ctx ->
                 val msg = mapper.readValue(ctx.message(), InMessage::class.java)
                 when (msg.op) {
-                    InMessage.OpType.Notifications -> viewLatest(state::update, gateways)
+                    InMessage.OpType.Notifications -> service.viewLatest()
                     InMessage.OpType.MarkAsRead ->
-                        markAsRead(
-                            state::update,
+                        service.markAsRead(
                             msg.args!!["gatewayId"].toString(),
                             msg.args["notificationId"].toString(),
-                            gateways
                         )
                     InMessage.OpType.ToggleMentioned ->
-                        toggleMentioned(state::update)
+                        service.toggleMentioned()
                 }
             }
             ws.onClose { ctx ->
@@ -150,6 +167,6 @@ fun main() {
 
     kotlin.concurrent.timer(null, false, 0, 15 * 1000) {
         System.err.println("timer fired")
-        sendLatestMentioned(state::update, gateways.map { Pair(it.key, it.value.client) }.toMap())
+        service.sendLatestMentioned()
     }
 }
