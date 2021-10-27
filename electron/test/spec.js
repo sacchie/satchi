@@ -3,6 +3,18 @@ const assert = require("assert");
 const electronPath = require("electron");
 const path = require("path");
 
+class Spec {
+  constructor(app) {
+    this.app = app;
+  }
+
+  showsAnInitialWindow() {
+    return this.app.client.getWindowCount().then((count) => {
+      assert.equal(count, 2);
+    });
+  }
+}
+
 describe("Application launch", function () {
   this.timeout(10000);
 
@@ -11,6 +23,7 @@ describe("Application launch", function () {
       path: electronPath,
       args: [path.join(__dirname, "..")],
     });
+    this.spec = new Spec(this.app);
     return this.app.start();
   });
 
@@ -21,8 +34,6 @@ describe("Application launch", function () {
   });
 
   it("shows an initial window", function () {
-    return this.app.client.getWindowCount().then(function (count) {
-      assert.equal(count, 2);
-    });
+    return this.spec.showsAnInitialWindow();
   });
 });
