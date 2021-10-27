@@ -11,7 +11,9 @@ function createWindow() {
   });
 
   win.loadFile("app/index.html");
-  win.webContents.openDevTools();
+
+  // これをしないとtest時にmochaが閉じない
+  // win.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {
