@@ -7,7 +7,7 @@
     "build": "webpack --config webpack.config.js",
     "start": "electron .",
     "format": "prettier --write .",
-    "test": "mocha"
+    "test": "xvfb-maybe mocha"
   },
   "keywords": [],
   "author": "",
