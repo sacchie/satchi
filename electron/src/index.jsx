@@ -129,7 +129,7 @@ function App({ client, viewModel }) {
   return null;
 }
 
-const ws = new WebSocket("ws://localhost:8037/connect");
+const ws = new WebSocket("ws://127.0.0.1:8037/connect");
 const client = new Client(ws);
 
 ws.onmessage = (msg) => {
