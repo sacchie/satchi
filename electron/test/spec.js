@@ -2,8 +2,9 @@ const Application = require("spectron").Application;
 const assert = require("assert");
 const electronPath = require("electron");
 const path = require("path");
+const { spawn } = require("child_process");
 
-class Spec {
+class TestCases {
   constructor(app) {
     this.app = app;
   }
@@ -13,17 +14,46 @@ class Spec {
       assert.strictEqual(count, 1);
     });
   }
+
+  async integrationWithMain_showingNotifications() {
+    const messages = await this.app.client.$$(
+      "*[data-testid=notification-card-content-message]"
+    );
+    assert.strictEqual(messages.length, 5);
+    messages.forEach(async (m) => {
+      const messageText = await m.getText();
+      assert.strictEqual(messageText, "Hello");
+    });
+  }
 }
 
-describe("Application launch", function () {
-  this.timeout(10000);
+describe("End-to-end tests", function () {
+  let mainProcess;
+
+  this.timeout(60000);
+
+  before(function () {
+    const options = {
+      cwd: path.resolve(path.join("..", "main")),
+      env: {
+        ...process.env,
+        GATEWAYS_PATH: path.resolve(path.join("test", "gateways.yml")),
+      },
+      stdio: "inherit",
+    };
+    console.log(options);
+    mainProcess = spawn("./gradlew", ["run"], options);
+    return new Promise((resolve) => {
+      setTimeout(resolve, 20000);
+    });
+  });
 
   beforeEach(function () {
     this.app = new Application({
       path: electronPath,
       args: [path.join(__dirname, "..")],
     });
-    this.spec = new Spec(this.app);
+    this.testCases = new TestCases(this.app);
     return this.app.start();
   });
 
@@ -33,7 +63,17 @@ describe("Application launch", function () {
     }
   });
 
+  after(function () {
+    if (!mainProcess.kill()) {
+      throw new Error();
+    }
+  });
+
   it("shows an initial window", function () {
-    return this.spec.showsAnInitialWindow();
+    return this.testCases.showsAnInitialWindow();
+  });
+
+  it("test", function () {
+    return this.testCases.integrationWithMain_showingNotifications();
   });
 });

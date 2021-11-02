@@ -1,0 +1,2 @@
+- clientFactory: main.client.hello.HelloClientFactory
+  type: UNMANAGED

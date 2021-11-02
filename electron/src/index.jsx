@@ -25,14 +25,22 @@ function NotificationCard(props) {
     </Tooltip>
   );
   return (
-    <Card style={props.mentioned ? { backgroundColor: "LightYellow" } : {}}>
+    <Card
+      style={props.mentioned ? { backgroundColor: "LightYellow" } : {}}
+      data-testid="notification-card"
+    >
       <CardHeader
         avatar={avatar}
         title={props.title}
         subheader={props.timestamp}
       />
       <CardContent>
-        <Typography variant="body2">{props.message}</Typography>
+        <Typography
+          variant="body2"
+          data-testid="notification-card-content-message"
+        >
+          {props.message}
+        </Typography>
       </CardContent>
       <CardActions>
         <Tooltip title="既読にする">
