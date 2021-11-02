@@ -10,7 +10,7 @@ class Spec {
 
   showsAnInitialWindow() {
     return this.app.client.getWindowCount().then((count) => {
-      assert.equal(count, 1);
+      assert.strictEqual(count, 1);
     });
   }
 }
