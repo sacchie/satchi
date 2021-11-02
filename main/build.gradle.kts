@@ -2,6 +2,8 @@ plugins {
     kotlin("jvm") version "1.5.10"
     application
     id("com.diffplug.spotless") version "5.17.0"
+    id("com.github.johnrengelman.shadow") version "7.1.0"
+    id("java")
 }
 
 group = "org.example"
@@ -29,4 +31,11 @@ spotless {
 
 application {
     mainClass.set("main.MainKt")
+}
+
+
+tasks.jar {
+    manifest {
+        attributes(mapOf("Main-Class" to "main.MainKt"))
+    }
 }

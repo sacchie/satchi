@@ -30,7 +30,7 @@ class TestCases {
 describe("End-to-end tests", function () {
   let mainProcess;
 
-  this.timeout(60000);
+  this.timeout(10000);
 
   before(function () {
     const options = {
@@ -41,9 +41,9 @@ describe("End-to-end tests", function () {
       },
       stdio: "inherit",
     };
-    mainProcess = spawn("./gradlew", ["run"], options);
+    mainProcess = spawn("java", ["-jar", "build/libs/main-1.0-SNAPSHOT-all.jar"], options);
     return new Promise((resolve) => {
-      setTimeout(resolve, 20000);
+      setTimeout(resolve, 3000); // TODO get rid of constant-time wait
     });
   });
 
