@@ -13,6 +13,7 @@ import main.desktopnotification.sendLatestMentioned
 import main.filter.toggleMentioned
 import main.notificationlist.markAsRead
 import main.notificationlist.viewLatest
+import java.io.File
 import java.net.URL
 import java.net.URLClassLoader
 import java.util.*
@@ -38,11 +39,16 @@ data class GatewayDefinition(
     val jarPath: String?
 )
 
-private fun loadGateways(yamlFilename: String): Map<GatewayId, main.notificationlist.Gateway> {
+private fun loadGateways(): Map<GatewayId, main.notificationlist.Gateway> {
+    val classLoader = object {}.javaClass.classLoader
+
+    val gatewaysPath = System.getenv("GATEWAYS_PATH")
+    val inputStream = if (gatewaysPath == null) classLoader.getResourceAsStream("src/gateways.yml") else File(gatewaysPath).inputStream()
+
     val mapper = ObjectMapper(YAMLFactory())
     mapper.registerKotlinModule()
-    val classLoader = object {}.javaClass.classLoader
-    val gatewayDefinitions = classLoader.getResourceAsStream(yamlFilename).use {
+
+    val gatewayDefinitions = inputStream.use {
         val responseTypeRef = object : TypeReference<List<GatewayDefinition>>() {}
         mapper.readValue(it, responseTypeRef)
     }
@@ -80,7 +86,7 @@ class Service(private val state: State, private val gateways: Gateways) {
 }
 
 fun main() {
-    val gateways = loadGateways("gateways.yml")
+    val gateways = loadGateways()
 
     val mapper = jacksonObjectMapper() // APIレスポンスで使いまわしている
     mapper.registerModule(JavaTimeModule()) // timezoneを明示的に指定したほうがよさそう
