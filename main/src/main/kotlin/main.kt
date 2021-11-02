@@ -34,7 +34,7 @@ data class OutMessage(val type: Type, val value: Any) {
 
 data class GatewayDefinition(
     val clientFactory: String,
-    val args: Map<String, String>,
+    val args: Map<String, String>?,
     val type: main.notificationlist.GatewayFactory,
     val jarPath: String?
 )
@@ -43,7 +43,13 @@ private fun loadGateways(): Map<GatewayId, main.notificationlist.Gateway> {
     val classLoader = object {}.javaClass.classLoader
 
     val gatewaysPath = System.getenv("GATEWAYS_PATH")
-    val inputStream = if (gatewaysPath == null) classLoader.getResourceAsStream("src/gateways.yml") else File(gatewaysPath).inputStream()
+    val inputStream = if (gatewaysPath == null) {
+        System.err.println("Read gateways definition from class loader")
+        classLoader.getResourceAsStream("gateways.yml")
+    } else {
+        System.err.println("Read gateways definition from file (gatewaysPath=$gatewaysPath)")
+        File(gatewaysPath).inputStream()
+    }
 
     val mapper = ObjectMapper(YAMLFactory())
     mapper.registerKotlinModule()
@@ -60,7 +66,7 @@ private fun loadGateways(): Map<GatewayId, main.notificationlist.Gateway> {
         val clientFactoryClass = extendedClassLoader.loadClass(def.clientFactory)
         when (val clientFactory = clientFactoryClass.getDeclaredConstructor().newInstance()) {
             is ClientFactory -> {
-                val client = clientFactory.createClient(def.args)
+                val client = clientFactory.createClient(Objects.requireNonNullElse(def.args, mapOf()))
                 return@mapIndexed Pair(index.toString(), def.type.create(client))
             }
             else -> throw RuntimeException()
