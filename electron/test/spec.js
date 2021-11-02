@@ -41,7 +41,11 @@ describe("End-to-end tests", function () {
       },
       stdio: "inherit",
     };
-    mainProcess = spawn("java", ["-jar", "build/libs/main-1.0-SNAPSHOT-all.jar"], options);
+    mainProcess = spawn(
+      "java",
+      ["-jar", "build/libs/main-1.0-SNAPSHOT-all.jar"],
+      options
+    );
     return new Promise((resolve) => {
       setTimeout(resolve, 3000); // TODO get rid of constant-time wait
     });
@@ -57,6 +61,9 @@ describe("End-to-end tests", function () {
   });
 
   afterEach(function () {
+    this.app.browserWindow.capturePage().then(function (imageBuffer) {
+      fs.writeFile(`${this.currentTest.title}.png`, imageBuffer);
+    });
     if (this.app && this.app.isRunning()) {
       return this.app.stop();
     }
@@ -68,11 +75,11 @@ describe("End-to-end tests", function () {
     }
   });
 
-  it("shows an initial window", function () {
+  it("shows_an_initial_window", function () {
     return this.testCases.showsAnInitialWindow();
   });
 
-  it("test", function () {
+  it("integration_with_main_showing_notifications", function () {
     return this.testCases.integrationWithMain_showingNotifications();
   });
 });
