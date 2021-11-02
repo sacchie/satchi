@@ -41,7 +41,6 @@ describe("End-to-end tests", function () {
       },
       stdio: "inherit",
     };
-    console.log(options);
     mainProcess = spawn("./gradlew", ["run"], options);
     return new Promise((resolve) => {
       setTimeout(resolve, 20000);

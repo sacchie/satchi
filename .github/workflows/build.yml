@@ -19,6 +19,10 @@ jobs:
           npm ci
           npm run build
         working-directory: ./electron
+      - uses: actions/upload-artifact@v2
+        with:
+          name: electron-bundle-js
+          path: ./electron/app/compiled/bundle.js
   build-main:
     runs-on: ubuntu-latest
     steps:
@@ -30,15 +34,29 @@ jobs:
       - run: |
           ./gradlew build
         working-directory: ./main
+      - uses: actions/upload-artifact@v2
+        with:
+          name: main-build
+          path: ./main/build/
   test-e2e:
     runs-on: ubuntu-latest
+    needs:
+      - build-electron
+      - build-main
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-node@v2
         with:
           node-version: '16'
+      - uses: actions/download-artifact@v2
+        with:
+          name: electron-bundle-js
+          path: ./electron/app/compiled/bundle.js
+      - uses: actions/download-artifact@v2
+        with:
+          name: main-build
+          path: ./main/build/
       - run: |
           npm ci
-          npm run build
           npm test
         working-directory: ./electron
