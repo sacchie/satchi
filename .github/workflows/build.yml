@@ -60,7 +60,3 @@ jobs:
           npm ci
           npm test
         working-directory: ./electron
-      - uses: actions/upload-artifact@v2
-        with:
-          name: screenshots
-          path: ./**/*.png

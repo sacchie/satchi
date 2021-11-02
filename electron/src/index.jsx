@@ -152,13 +152,6 @@ ws.onmessage = (msg) => {
   }
 };
 
-ws.addEventListener("error", function (event) {
-  document.getElementById(
-    "app"
-  ).innerText = `WebSocket Error: ${event.target.url}`;
-  console.log("WebSocket error: ", event);
-});
-
 ws.addEventListener("open", (event) => {
   client.notifications();
 });
