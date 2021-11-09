@@ -121,9 +121,22 @@ function App({ client, viewModel }) {
   return null;
 }
 
+let connectionState = "disconnected";
+
 function createWebsocket(onError) {
   const ws = new WebSocket("ws://localhost:8037/connect");
   const client = new Client(ws);
+
+  ws.addEventListener("open", () => {
+    connectionState = "connected";
+    client.notifications();
+  });
+
+  // 通常oncloseにはならないはずなのでerrorのcbをつめておく
+  ws.onclose = ws.onerror = () => {
+    connectionState = "disconnected";
+    onError();
+  };
 
   ws.onmessage = (msg) => {
     const outMessage = JSON.parse(msg.data);
@@ -144,27 +157,30 @@ function createWebsocket(onError) {
         break;
     }
   };
-
-  ws.addEventListener("open", () => {
-    client.notifications();
-  });
-
-  ws.onerror = onError;
-  // 通常oncloseにはならないはずなのでerrorのcbをつめておく
-  ws.onclose = onError;
 };
-
 function handleReconnect() {
+  if (connectionState !== "disconnected") {
+    return;
+  }
+  connectionState = "connecting";
+
   createWebsocket(() => {
-    ReactDOM.render((
-        <div>
-          Websocket Error!
-          <button onClick={handleReconnect}>
-            Reconnect
-          </button>
-        </div>
-    ), document.getElementById("app"));
+    ReactDOM.render((<WebsocketError
+            onReconnect={handleReconnect}
+        />),
+        document.getElementById("app"));
   });
+}
+
+function WebsocketError(props) {
+  return(
+      <div>
+        Websocket Error!
+        <button onClick={props.onReconnect}>
+          Reconnect
+        </button>
+      </div>
+  );
 }
 
 handleReconnect();
