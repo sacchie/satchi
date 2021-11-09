@@ -55,22 +55,6 @@ class Client {
     this.ws = ws;
   }
 
-  onMessage(cb) {
-    this.ws.onmessage = (msg) => {
-      cb(JSON.parse(msg.data));
-    };
-  }
-
-  onOpen(cb) {
-    this.ws.addEventListener("open", cb);
-  }
-
-  onError(cb) {
-    this.ws.onerror = cb;
-    // 通常oncloseにはならないはずなのでerrorのcbをつめておく
-    this.ws.onclose = cb;
-  }
-
   notifications() {
     this.ws.send(
       JSON.stringify({
@@ -137,29 +121,50 @@ function App({ client, viewModel }) {
   return null;
 }
 
-const client = new Client(new WebSocket("ws://localhost:8037/connect"));
+function createWebsocket(onError) {
+  const ws = new WebSocket("ws://localhost:8037/connect");
+  const client = new Client(ws);
 
-client.onMessage((outMessage) => {
-  switch (outMessage.type) {
-    case "UpdateView":
-      ReactDOM.render(
-        <App client={client} viewModel={outMessage.value} />,
-        document.getElementById("app")
-      );
-      break;
-    case "ShowDesktopNotification":
-      new Notification(outMessage.value.title, {
-        body: outMessage.value.body,
-      }).onclick = (event) => {
-        window.myAPI.openExternal(outMessage.value.url);
-      };
-      console.log("ShowDesktopNotification", outMessage);
-      break;
-  }
-});
+  ws.onmessage = (msg) => {
+    const outMessage = JSON.parse(msg.data);
+    switch (outMessage.type) {
+      case "UpdateView":
+        ReactDOM.render(
+            <App client={client} viewModel={outMessage.value}/>,
+            document.getElementById("app")
+        );
+        break;
+      case "ShowDesktopNotification":
+        new Notification(outMessage.value.title, {
+          body: outMessage.value.body,
+        }).onclick = (event) => {
+          window.myAPI.openExternal(outMessage.value.url);
+        };
+        console.log("ShowDesktopNotification", outMessage);
+        break;
+    }
+  };
 
-client.onOpen(() => client.notifications());
+  ws.addEventListener("open", () => {
+    client.notifications();
+  });
 
-client.onError(() => {
-  ReactDOM.render(<div>Websocket Error!</div>, document.getElementById("app"));
-});
+  ws.onerror = onError;
+  // 通常oncloseにはならないはずなのでerrorのcbをつめておく
+  ws.onclose = onError;
+};
+
+function handleReconnect() {
+  createWebsocket(() => {
+    ReactDOM.render((
+        <div>
+          Websocket Error!
+          <button onClick={handleReconnect}>
+            Reconnect
+          </button>
+        </div>
+    ), document.getElementById("app"));
+  });
+}
+
+handleReconnect();
