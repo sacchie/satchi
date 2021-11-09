@@ -1,20 +1,18 @@
 package main
 
-import java.time.OffsetDateTime
-import java.time.ZoneOffset
-
 typealias StateUpdater<S> = (currentState: S) -> S
 
 class State(
     var notificationList: main.notificationlist.State,
     var filter: main.filter.State,
     var desktopNotification: main.desktopnotification.State,
-    val sendViewModel: (
+    val onChangeTriggeringViewUpdate: (
         notificationListState: main.notificationlist.State,
         filterState: main.filter.State,
     ) -> Unit,
-    val sendDesktopNotification: (
-        notifications: List<Notification>
+    val onChangeTriggeringDesktopNotification: (
+        main.desktopnotification.State,
+        main.desktopnotification.State
     ) -> Unit,
 ) {
     @Synchronized
@@ -24,29 +22,21 @@ class State(
         notificationList = stateUpdater(notificationList)
         val nextState = notificationList::class.java
         System.err.println("$prevState -> $nextState")
-        sendViewModel(notificationList, filter)
+        onChangeTriggeringViewUpdate(notificationList, filter)
     }
 
     @Synchronized
     @JvmName("updateFilter")
     fun update(stateUpdater: StateUpdater<main.filter.State>) {
         filter = stateUpdater(filter)
-        sendViewModel(notificationList, filter)
+        onChangeTriggeringViewUpdate(notificationList, filter)
     }
 
     @Synchronized
     @JvmName("updateDesktopNotification")
     fun update(stateUpdater: StateUpdater<main.desktopnotification.State>) {
         val newState = stateUpdater(desktopNotification)
-        val now = OffsetDateTime.now(ZoneOffset.UTC)
-        val toSend = desktopNotification.holders.flatMap {
-            val gatewayId = it.key
-            val after = newState.holders[gatewayId]!!
-            val before = it.value
-            after.fetched - before.fetched
-        }.filter { it.timestamp > now.minusMinutes(5) }
-        sendDesktopNotification(toSend)
-
+        onChangeTriggeringDesktopNotification(newState, desktopNotification)
         desktopNotification = newState
     }
 }

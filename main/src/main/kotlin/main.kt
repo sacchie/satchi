@@ -15,6 +15,8 @@ import main.notificationlist.markAsRead
 import main.notificationlist.viewLatest
 import java.net.URL
 import java.net.URLClassLoader
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 import java.util.*
 
 const val MAIN_URL = "http://localhost:8037"
@@ -64,8 +66,41 @@ private fun loadGateways(yamlFilename: String): Map<GatewayId, main.notification
 
 typealias Gateways = Map<GatewayId, main.notificationlist.Gateway>
 
-class Service(private val state: State, private val gateways: Gateways) {
+class Service(
+    private val gateways: Gateways,
+    private val sendUpdateView: (viewModel: ViewModel) -> Unit,
+    private val sendShowDesktopNotification: (notifications: List<Notification>) -> Unit
+) {
+    private val state = State(
+        main.notificationlist.NullState(),
+        main.filter.State(false),
+        main.desktopnotification.State(
+            gateways.map {
+                Pair(
+                    it.key,
+                    main.desktopnotification.SentNotificationHolder(listOf())
+                )
+            }.toMap()
+        ),
+
+        onChangeTriggeringViewUpdate = { notificationListState, filterState ->
+            sendUpdateView(ViewModel.fromState(notificationListState, filterState))
+        },
+
+        onChangeTriggeringDesktopNotification = { newState, oldState ->
+            val now = OffsetDateTime.now(ZoneOffset.UTC)
+            val toSend = oldState.holders.flatMap {
+                val gatewayId = it.key
+                val after = newState.holders[gatewayId]!!
+                val before = it.value
+                after.fetched - before.fetched.toSet()
+            }.filter { it.timestamp > now.minusMinutes(5) }
+            sendShowDesktopNotification(toSend)
+        }
+    )
+
     fun viewLatest() = viewLatest(state::update, gateways)
+
     fun markAsRead(gatewayId: GatewayId, notificationId: NotificationId) =
         markAsRead(
             state::update,
@@ -75,6 +110,7 @@ class Service(private val state: State, private val gateways: Gateways) {
         )
 
     fun toggleMentioned() = toggleMentioned(state::update)
+
     fun sendLatestMentioned() =
         sendLatestMentioned(state::update, gateways.map { Pair(it.key, it.value.client) }.toMap())
 }
@@ -88,29 +124,15 @@ fun main() {
 
     val webSocketContexts = Collections.synchronizedList(mutableListOf<WsContext>())
 
-    val state = State(
-        main.notificationlist.NullState(),
-        main.filter.State(false),
-        main.desktopnotification.State(
-            gateways.map {
-                Pair(
-                    it.key,
-                    main.desktopnotification.SentNotificationHolder(listOf())
-                )
-            }.toMap()
-        ),
-        sendViewModel = { notificationListState, filterState ->
+    val service = Service(
+        gateways,
+        sendUpdateView = { viewModel ->
+            val outMessage = OutMessage(OutMessage.Type.UpdateView, viewModel)
             webSocketContexts.forEach { ctx ->
-                val outMessage = OutMessage(
-                    OutMessage.Type.UpdateView,
-                    ViewModel.fromState(notificationListState, filterState)
-                )
-                ctx.send(
-                    mapper.writeValueAsString(outMessage)
-                )
+                ctx.send(mapper.writeValueAsString(outMessage))
             }
         },
-        sendDesktopNotification = { notifications ->
+        sendShowDesktopNotification = { notifications ->
             notifications.forEach { notification ->
                 webSocketContexts.forEach { ctx ->
                     val outMessage = OutMessage(
@@ -126,8 +148,6 @@ fun main() {
             }
         }
     )
-
-    val service = Service(state, gateways)
 
     Javalin.create().apply {
         ws("/connect") { ws ->
