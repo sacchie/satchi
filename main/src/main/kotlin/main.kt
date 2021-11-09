@@ -71,7 +71,8 @@ class Service(
     private val sendUpdateView: (viewModel: ViewModel) -> Unit,
     private val sendShowDesktopNotification: (notifications: List<Notification>) -> Unit
 ) {
-    private val state = State(main.notificationlist.NullState(),
+    private val state = State(
+        main.notificationlist.NullState(),
         main.filter.State(false),
         main.desktopnotification.State(
             gateways.map {
@@ -123,7 +124,8 @@ fun main() {
 
     val webSocketContexts = Collections.synchronizedList(mutableListOf<WsContext>())
 
-    val service = Service(gateways,
+    val service = Service(
+        gateways,
         sendUpdateView = { viewModel ->
             val outMessage = OutMessage(OutMessage.Type.UpdateView, viewModel)
             webSocketContexts.forEach { ctx ->

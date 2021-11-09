@@ -1,8 +1,5 @@
 package main
 
-import java.time.OffsetDateTime
-import java.time.ZoneOffset
-
 typealias StateUpdater<S> = (currentState: S) -> S
 
 class State(
@@ -13,7 +10,7 @@ class State(
         notificationListState: main.notificationlist.State,
         filterState: main.filter.State,
     ) -> Unit,
-    val onChangeDesktop: ( //todo: rename
+    val onChangeDesktop: ( // todo: rename
         main.desktopnotification.State,
         main.desktopnotification.State
     ) -> Unit,
