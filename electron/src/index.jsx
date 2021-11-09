@@ -65,6 +65,12 @@ class Client {
     this.ws.addEventListener("open", cb);
   }
 
+  onError(cb) {
+    this.ws.onerror = cb;
+    // 通常oncloseにはならないはずなのでerrorのcbをつめておく
+    this.ws.onclose = cb;
+  }
+
   notifications() {
     this.ws.send(
       JSON.stringify({
@@ -132,6 +138,7 @@ function App({ client, viewModel }) {
 }
 
 const client = new Client(new WebSocket("ws://localhost:8037/connect"));
+
 client.onMessage((outMessage) => {
   switch (outMessage.type) {
     case "UpdateView":
@@ -150,4 +157,9 @@ client.onMessage((outMessage) => {
       break;
   }
 });
+
 client.onOpen(() => client.notifications());
+
+client.onError(() => {
+  ReactDOM.render(<div>Websocket Error!</div>, document.getElementById("app"));
+});
