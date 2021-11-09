@@ -50,6 +50,81 @@ function NotificationCard(props) {
   );
 }
 
+class ReconnectableWebSocket {
+  constructor(onError, onOpen, onMessage) {
+    this.isReconnecting = false;
+
+    this.onError = onError;
+    this.onOpen = onOpen;
+    this.onMessage = onMessage;
+
+    this.ws;
+  }
+
+  reconnect() {
+    if (this.isReconnecting) {
+      return;
+    }
+    this.isReconnecting = true;
+
+    this.ws = new WebSocket("ws://localhost:8037/connect");
+
+    this.ws.addEventListener("open", () => {
+      this.isReconnecting = false;
+      this.onOpen();
+    });
+
+    // 通常oncloseにはならないはずなのでerrorのcbをつめておく
+    this.ws.onclose = this.ws.onerror = () => {
+      this.isReconnecting = false;
+      this.onError();
+      this.ws = undefined;
+    };
+
+    this.ws.onmessage = (msg) => {
+      this.onMessage(msg);
+    };
+  }
+
+  send(data) {
+    if (!this.ws) {
+      throw new Error("no ws instance");
+    }
+    this.ws.send(data);
+  }
+}
+
+const reconnectableWebSocket = new ReconnectableWebSocket(
+  () => {
+    ReactDOM.render(
+      <WebsocketError onReconnect={() => reconnectableWebSocket.reconnect()} />,
+      document.getElementById("app")
+    );
+  },
+  () => {
+    client.notifications();
+  },
+  (msg) => {
+    const outMessage = JSON.parse(msg.data);
+    switch (outMessage.type) {
+      case "UpdateView":
+        ReactDOM.render(
+          <App client={client} viewModel={outMessage.value} />,
+          document.getElementById("app")
+        );
+        break;
+      case "ShowDesktopNotification":
+        new Notification(outMessage.value.title, {
+          body: outMessage.value.body,
+        }).onclick = (event) => {
+          window.myAPI.openExternal(outMessage.value.url);
+        };
+        console.log("ShowDesktopNotification", outMessage);
+        break;
+    }
+  }
+);
+
 class Client {
   constructor(ws) {
     this.ws = ws;
@@ -80,6 +155,8 @@ class Client {
     );
   }
 }
+
+const client = new Client(reconnectableWebSocket);
 
 function App({ client, viewModel }) {
   if (viewModel.stateClass === "LoadingState") {
@@ -121,66 +198,13 @@ function App({ client, viewModel }) {
   return null;
 }
 
-let connectionState = "disconnected";
-
-function createWebsocket(onError) {
-  const ws = new WebSocket("ws://localhost:8037/connect");
-  const client = new Client(ws);
-
-  ws.addEventListener("open", () => {
-    connectionState = "connected";
-    client.notifications();
-  });
-
-  // 通常oncloseにはならないはずなのでerrorのcbをつめておく
-  ws.onclose = ws.onerror = () => {
-    connectionState = "disconnected";
-    onError();
-  };
-
-  ws.onmessage = (msg) => {
-    const outMessage = JSON.parse(msg.data);
-    switch (outMessage.type) {
-      case "UpdateView":
-        ReactDOM.render(
-            <App client={client} viewModel={outMessage.value}/>,
-            document.getElementById("app")
-        );
-        break;
-      case "ShowDesktopNotification":
-        new Notification(outMessage.value.title, {
-          body: outMessage.value.body,
-        }).onclick = (event) => {
-          window.myAPI.openExternal(outMessage.value.url);
-        };
-        console.log("ShowDesktopNotification", outMessage);
-        break;
-    }
-  };
-};
-function handleReconnect() {
-  if (connectionState !== "disconnected") {
-    return;
-  }
-  connectionState = "connecting";
-
-  createWebsocket(() => {
-    ReactDOM.render((<WebsocketError
-            onReconnect={handleReconnect}
-        />),
-        document.getElementById("app"));
-  });
-}
-
 function WebsocketError(props) {
-  return(
-      <div>
-        Websocket Error!
-        <button onClick={props.onReconnect}>
-          Reconnect
-        </button>
-      </div>
+  return (
+    <div>
+      Websocket Error!
+      <button onClick={props.onReconnect}>Reconnect</button>
+    </div>
   );
 }
 
-handleReconnect();
+reconnectableWebSocket.reconnect();
