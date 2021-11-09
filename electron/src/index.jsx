@@ -55,6 +55,16 @@ class Client {
     this.ws = ws;
   }
 
+  onMessage(cb) {
+    this.ws.onmessage = (msg) => {
+      cb(JSON.parse(msg.data));
+    };
+  }
+
+  onOpen(cb) {
+    this.ws.addEventListener("open", cb);
+  }
+
   notifications() {
     this.ws.send(
       JSON.stringify({
@@ -121,11 +131,8 @@ function App({ client, viewModel }) {
   return null;
 }
 
-const ws = new WebSocket("ws://localhost:8037/connect");
-const client = new Client(ws);
-
-ws.onmessage = (msg) => {
-  const outMessage = JSON.parse(msg.data);
+const client = new Client(new WebSocket("ws://localhost:8037/connect"));
+client.onMessage((outMessage) => {
   switch (outMessage.type) {
     case "UpdateView":
       ReactDOM.render(
@@ -142,8 +149,5 @@ ws.onmessage = (msg) => {
       console.log("ShowDesktopNotification", outMessage);
       break;
   }
-};
-
-ws.addEventListener("open", (event) => {
-  client.notifications();
 });
+client.onOpen(() => client.notifications());
