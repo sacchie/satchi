@@ -83,11 +83,11 @@ class Service(
             }.toMap()
         ),
 
-        onChange = { notificationListState, filterState ->
+        onChangeTriggeringViewUpdate = { notificationListState, filterState ->
             sendUpdateView(ViewModel.fromState(notificationListState, filterState))
         },
 
-        onChangeDesktop = { newState, oldState ->
+        onChangeTriggeringDesktopNotification = { newState, oldState ->
             val now = OffsetDateTime.now(ZoneOffset.UTC)
             val toSend = oldState.holders.flatMap {
                 val gatewayId = it.key
