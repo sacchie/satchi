@@ -147,7 +147,7 @@ function listenWebsocket(
   ws.onclose = ws.onerror = onError;
 }
 
-function WebsocketError(props) {
+function Disconnected(props) {
   return (
     <div>
       Websocket Error!
@@ -156,58 +156,40 @@ function WebsocketError(props) {
   );
 }
 
-function Disconnected(props) {
-  const [isReconnecting, setIsReconnecting] = useState(false);
-
-  function reconnect() {
-    if (isReconnecting) {
-      return;
-    }
-    setIsReconnecting(true);
-    setTimeout(props.connect, 1000);
+function connect() {
+  function doConnect() {
+    const ws = new WebSocket("ws://localhost:8037/connect");
+    const client = new Client(ws);
+    listenWebsocket(
+      ws,
+      // open
+      () => client.notifications(),
+      // update view
+      (viewModel) => {
+        ReactDOM.render(
+          <App client={client} viewModel={viewModel} />,
+          document.getElementById("app")
+        );
+      },
+      // desktop notification
+      (ntf) => {
+        new Notification(ntf.title, {
+          body: ntf.body,
+        }).onclick = (event) => {
+          window.myAPI.openExternal(ntf.url);
+        };
+      },
+      // error
+      () => {
+        ReactDOM.render(
+          <Disconnected onReconnect={connect} />,
+          document.getElementById("app")
+        );
+      }
+    );
   }
-
-  if (isReconnecting) {
-    return <div>Reconecting...</div>;
-  }
-
-  return <WebsocketError onReconnect={reconnect} />;
+  ReactDOM.render(<div>Reconecting...</div>, document.getElementById("app"));
+  setTimeout(doConnect, 1000);
 }
 
-function connect(connectCount) {
-  const ws = new WebSocket("ws://localhost:8037/connect");
-  const client = new Client(ws);
-  listenWebsocket(
-    ws,
-    // open
-    () => client.notifications(),
-    // update view
-    (viewModel) => {
-      ReactDOM.render(
-        <App client={client} viewModel={viewModel} />,
-        document.getElementById("app")
-      );
-    },
-    // desktop notification
-    (ntf) => {
-      new Notification(ntf.title, {
-        body: ntf.body,
-      }).onclick = (event) => {
-        window.myAPI.openExternal(ntf.url);
-      };
-    },
-    // error
-    () => {
-      ReactDOM.render(
-        // https://ja.reactjs.org/blog/2018/06/07/you-probably-dont-need-derived-state.html#recommendation-fully-uncontrolled-component-with-a-key
-        <Disconnected
-          key={connectCount}
-          connect={() => connect(1 + connectCount)}
-        />,
-        document.getElementById("app")
-      );
-    }
-  );
-}
-
-connect(0);
+connect();
