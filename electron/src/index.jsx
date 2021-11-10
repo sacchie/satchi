@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import ReactDOM from "react-dom";
 import Card from "@material-ui/core/Card";
 import CardContent from "@material-ui/core/CardContent";
@@ -121,66 +121,93 @@ function App({ client, viewModel }) {
   return null;
 }
 
-let connectionState = "disconnected";
-
-function createWebsocket(onError) {
-  const ws = new WebSocket("ws://localhost:8037/connect");
-  const client = new Client(ws);
-
-  ws.addEventListener("open", () => {
-    connectionState = "connected";
-    client.notifications();
-  });
-
-  // 通常oncloseにはならないはずなのでerrorのcbをつめておく
-  ws.onclose = ws.onerror = () => {
-    connectionState = "disconnected";
-    onError();
-  };
+function listenWebsocket(
+  ws,
+  onOpen,
+  onUpdateViewModel,
+  onShowDesktopNotification,
+  onError
+) {
+  ws.addEventListener("open", onOpen);
 
   ws.onmessage = (msg) => {
     const outMessage = JSON.parse(msg.data);
     switch (outMessage.type) {
       case "UpdateView":
-        ReactDOM.render(
-            <App client={client} viewModel={outMessage.value}/>,
-            document.getElementById("app")
-        );
+        onUpdateViewModel(outMessage.value);
         break;
       case "ShowDesktopNotification":
-        new Notification(outMessage.value.title, {
-          body: outMessage.value.body,
-        }).onclick = (event) => {
-          window.myAPI.openExternal(outMessage.value.url);
-        };
+        onShowDesktopNotification(outMessage.value);
         console.log("ShowDesktopNotification", outMessage);
         break;
     }
   };
-};
-function handleReconnect() {
-  if (connectionState !== "disconnected") {
-    return;
-  }
-  connectionState = "connecting";
 
-  createWebsocket(() => {
-    ReactDOM.render((<WebsocketError
-            onReconnect={handleReconnect}
-        />),
-        document.getElementById("app"));
-  });
+  // 通常oncloseにはならないはずなのでerrorのcbをつめておく
+  ws.onclose = ws.onerror = onError;
 }
 
 function WebsocketError(props) {
-  return(
-      <div>
-        Websocket Error!
-        <button onClick={props.onReconnect}>
-          Reconnect
-        </button>
-      </div>
+  return (
+    <div>
+      Websocket Error!
+      <button onClick={props.onReconnect}>Reconnect</button>
+    </div>
   );
 }
 
-handleReconnect();
+function Disconnected(props) {
+  const [isReconnecting, setIsReconnecting] = useState(false);
+
+  function reconnect() {
+    if (isReconnecting) {
+      return;
+    }
+    setIsReconnecting(true);
+    setTimeout(props.connect, 1000);
+  }
+
+  if (isReconnecting) {
+    return <div>Reconecting...</div>;
+  }
+
+  return <WebsocketError onReconnect={reconnect} />;
+}
+
+function connect(connectCount) {
+  const ws = new WebSocket("ws://localhost:8037/connect");
+  const client = new Client(ws);
+  listenWebsocket(
+    ws,
+    // open
+    () => client.notifications(),
+    // update view
+    (viewModel) => {
+      ReactDOM.render(
+        <App client={client} viewModel={viewModel} />,
+        document.getElementById("app")
+      );
+    },
+    // desktop notification
+    (ntf) => {
+      new Notification(ntf.title, {
+        body: ntf.body,
+      }).onclick = (event) => {
+        window.myAPI.openExternal(ntf.url);
+      };
+    },
+    // error
+    () => {
+      ReactDOM.render(
+        // https://ja.reactjs.org/blog/2018/06/07/you-probably-dont-need-derived-state.html#recommendation-fully-uncontrolled-component-with-a-key
+        <Disconnected
+          key={connectCount}
+          connect={() => connect(1 + connectCount)}
+        />,
+        document.getElementById("app")
+      );
+    }
+  );
+}
+
+connect(0);
