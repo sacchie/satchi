@@ -9,9 +9,12 @@ import strikt.api.expectThat
 import strikt.assertions.isA
 import strikt.assertions.isEqualTo
 import strikt.assertions.isTrue
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 
 internal class ServiceTest {
     private lateinit var sut: Service
+    private lateinit var helloClient: HelloClient
     private lateinit var sentViewModels: MutableList<ViewModel>
     private lateinit var sentDesktopNotifications: MutableList<Notification>
 
@@ -19,8 +22,9 @@ internal class ServiceTest {
     fun setup() {
         sentViewModels = mutableListOf()
         sentDesktopNotifications = mutableListOf()
+        helloClient = HelloClient()
         sut = Service(
-            mapOf("0" to GatewayFactory.UNMANAGED.create(HelloClient())),
+            mapOf("0" to GatewayFactory.UNMANAGED.create(helloClient)),
             sendUpdateView = sentViewModels::add,
             sendShowDesktopNotification = sentDesktopNotifications::addAll
         )
@@ -54,7 +58,7 @@ internal class ServiceTest {
     }
 
     @Test
-    fun `Use can view mentioned notifications only in the list`() {
+    fun `User can view mentioned notifications only in the list`() {
         sut.viewLatest()
         sut.toggleMentioned()
         expectThat(sentViewModels.size).isEqualTo(3)
@@ -63,6 +67,49 @@ internal class ServiceTest {
             expectThat(it.isMentionOnly).isTrue()
             expectThat(it.notifications.size).isEqualTo(1)
             expectThat(it.notifications[0].id).isEqualTo("0")
+        }
+    }
+
+    @Test
+    fun `User can view notifications only matching the keyword in the list`() {
+        helloClient.notifications = listOf(
+            Notification(
+                OffsetDateTime.now(ZoneOffset.UTC),
+                Notification.Source("source name", "https://example.com/source/url", null),
+                "title",
+                "Hello",
+                false,
+                "1"
+            ),
+            Notification(
+                OffsetDateTime.now(ZoneOffset.UTC),
+                Notification.Source("source name", "https://example.com/source/url", null),
+                "title",
+                "World",
+                false,
+                "2"
+            )
+        )
+
+        sut.viewLatest()
+        expectThat(sentViewModels.size).isEqualTo(2)
+        expectThat(sentViewModels[1].stateClass).isEqualTo("ViewingState")
+
+        sut.changeFilterKeyword("World")
+        expectThat(sentViewModels.size).isEqualTo(3)
+        expectThat(sentViewModels[2].stateClass).isEqualTo("ViewingState")
+        (sentViewModels[2].stateData as ViewModel.ViewingData).let {
+            expectThat(it.notifications.size).isEqualTo(1)
+            expectThat(it.notifications[0].id).isEqualTo("2")
+        }
+
+        sut.changeFilterKeyword(" World\t")
+        expectThat(sentViewModels.size).isEqualTo(3)
+
+        sut.changeFilterKeyword(" ")
+        expectThat(sentViewModels.size).isEqualTo(4)
+        (sentViewModels[3].stateData as ViewModel.ViewingData).let {
+            expectThat(it.notifications.size).isEqualTo(2)
         }
     }
 

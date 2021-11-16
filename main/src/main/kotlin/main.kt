@@ -10,6 +10,7 @@ import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import io.javalin.Javalin
 import io.javalin.websocket.WsContext
 import main.desktopnotification.sendLatestMentioned
+import main.filter.changeKeyword
 import main.filter.toggleMentioned
 import main.notificationlist.markAsRead
 import main.notificationlist.viewLatest
@@ -23,7 +24,7 @@ const val MAIN_URL = "http://localhost:8037"
 
 data class InMessage(val op: OpType, val args: Map<String, Object>?) {
     enum class OpType {
-        Notifications, MarkAsRead, ToggleMentioned
+        Notifications, MarkAsRead, ToggleMentioned, ChangeFilterKeyword
     }
 }
 
@@ -73,7 +74,7 @@ class Service(
 ) {
     private val state = State(
         main.notificationlist.NullState(),
-        main.filter.State(false),
+        main.filter.State(false, ""),
         main.desktopnotification.State(
             gateways.map {
                 Pair(
@@ -84,7 +85,24 @@ class Service(
         ),
 
         onChangeTriggeringViewUpdate = { notificationListState, filterState ->
-            sendUpdateView(ViewModel.fromState(notificationListState, filterState))
+            val data: Any? = when (notificationListState) {
+                is main.notificationlist.LoadingState -> null
+                is main.notificationlist.ViewingState -> {
+                    val ntfs = notificationListState.holders.flatMap {
+                        it.value.getUnread()
+                            .filter { if (filterState.isMentionOnly) it.mentioned else true }
+                            .filter { if (filterState.keyword.isBlank()) true else matchKeyword(it, filterState.keyword) }
+                            .map { n -> ViewModel.Notification.from(it.key, n) }
+                    }
+                        .sortedBy { -it.timestamp.toEpochSecond() }
+                    // sort from newest to oldest
+                    ViewModel.ViewingData(filterState.isMentionOnly, ntfs)
+                }
+                else -> throw RuntimeException()
+            }
+
+            val viewModel = ViewModel(notificationListState.javaClass.simpleName, data)
+            sendUpdateView(viewModel)
         },
 
         onChangeTriggeringDesktopNotification = { newState, oldState ->
@@ -110,6 +128,10 @@ class Service(
         )
 
     fun toggleMentioned() = toggleMentioned(state::update)
+
+    fun changeFilterKeyword(keyword: String) = changeKeyword(state::update, keyword)
+
+    private fun matchKeyword(ntf: Notification, keyword: String) = ntf.message.contains(keyword) || ntf.title.contains(keyword) || ntf.source.name.contains(keyword)
 
     fun sendLatestMentioned() =
         sendLatestMentioned(state::update, gateways.map { Pair(it.key, it.value.client) }.toMap())
@@ -166,6 +188,7 @@ fun main() {
                         )
                     InMessage.OpType.ToggleMentioned ->
                         service.toggleMentioned()
+                    InMessage.OpType.ChangeFilterKeyword -> service.changeFilterKeyword(msg.args!!["keyword"].toString())
                 }
             }
             ws.onClose { ctx ->

@@ -28,8 +28,11 @@ class State(
     @Synchronized
     @JvmName("updateFilter")
     fun update(stateUpdater: StateUpdater<main.filter.State>) {
-        filter = stateUpdater(filter)
-        onChangeTriggeringViewUpdate(notificationList, filter)
+        val newFilter = stateUpdater(filter)
+        if (newFilter != filter) {
+            filter = newFilter
+            onChangeTriggeringViewUpdate(notificationList, filter)
+        }
     }
 
     @Synchronized

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import ReactDOM from "react-dom";
 import Card from "@material-ui/core/Card";
 import CardContent from "@material-ui/core/CardContent";
@@ -144,6 +144,15 @@ class Client {
       })
     );
   }
+
+  changeFilterKeyword(keyword) {
+    this.ws.send(
+      JSON.stringify({
+        op: "ChangeFilterKeyword",
+        args: { keyword },
+      })
+    );
+  }
 }
 
 function App({ client, viewModel }) {
@@ -168,7 +177,13 @@ function App({ client, viewModel }) {
               color="default"
               inputProps={{ "aria-label": "secondary checkbox" }}
             />
-            <SearchBox value={keyword} onChange={setKeyword} />
+            <SearchBox
+              value={keyword}
+              onChange={(keyword) => {
+                setKeyword(keyword);
+                client.changeFilterKeyword(keyword);
+              }}
+            />
           </Toolbar>
         </AppBar>
         <NotificationCardList
