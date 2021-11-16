@@ -50,106 +50,68 @@ function NotificationCard(props) {
   );
 }
 
-class ReconnectableWebSocket {
-  constructor(onError, onOpen, onMessage) {
-    this.isReconnecting = false;
-
-    this.onError = onError;
-    this.onOpen = onOpen;
-    this.onMessage = onMessage;
-
-    this.ws;
-  }
-
-  reconnect() {
-    if (this.isReconnecting) {
-      return;
-    }
-    this.isReconnecting = true;
-
-    this.ws = new WebSocket("ws://localhost:8037/connect");
-
-    this.ws.addEventListener("open", () => {
-      this.isReconnecting = false;
-      this.onOpen();
-    });
-
-    this.ws.onclose = (e) => {
-      this.isReconnecting = false;
-      this.onError();
-      this.ws = undefined;
-    };
-
-    this.ws.onmessage = (msg) => {
-      this.onMessage(msg);
-    };
-  }
-
-  send(data) {
-    if (!this.ws) {
-      throw new Error("no ws instance");
-    }
-    this.ws.send(data);
-  }
-}
-
-let timer;
-
-const reconnectableWebSocket = new ReconnectableWebSocket(
-  () => {
-    let timeToReconnect = 5 + 1;
-    timer && clearInterval(timer);
-    timer = setInterval(() => {
-      timeToReconnect--;
-      ReactDOM.render(
-        <WebsocketError
-          onReconnect={
-            timeToReconnect > 0
-              ? () => {
-                  console.log("reconnect by button", timer);
-                  reconnectableWebSocket.reconnect();
-                  timer && clearInterval(timer);
-                  timer = undefined;
-                  console.log("timer cleared by button");
-                }
-              : undefined
-          }
-          timeToReconnect={timeToReconnect}
-        />,
-        document.getElementById("app")
-      );
-      if (timeToReconnect === 0) {
-        console.log("reconnect by timer", timer);
-        timer && clearInterval(timer);
-        reconnectableWebSocket.reconnect();
-        timer = undefined;
-        console.log("timer cleared by timer");
-      }
-    }, 1000);
-  },
-  () => {
-    client.notifications();
-  },
-  (msg) => {
+function addListenersToWebSocket(ws, listeners) {
+  ws.addEventListener("open", listeners.onOpen);
+  ws.onmessage = (msg) => {
     const outMessage = JSON.parse(msg.data);
     switch (outMessage.type) {
       case "UpdateView":
-        ReactDOM.render(
-          <App client={client} viewModel={outMessage.value} />,
-          document.getElementById("app")
-        );
+        listeners.onUpdateView(outMessage.value);
         break;
       case "ShowDesktopNotification":
-        new Notification(outMessage.value.title, {
-          body: outMessage.value.body,
-        }).onclick = (event) => {
-          window.myAPI.openExternal(outMessage.value.url);
-        };
-        console.log("ShowDesktopNotification", outMessage);
+        listeners.onShowDesktopNotification(outMessage.value);
         break;
     }
+  };
+  ws.onclose = listeners.onClose;
+}
+
+function render(component) {
+  ReactDOM.render(component, document.getElementById("app"));
+}
+
+function connect() {
+  function doConnect() {
+    const ws = new WebSocket("ws://localhost:8037/connect");
+    const client = new Client(ws);
+    addListenersToWebSocket(ws, {
+      onOpen: () => {
+        client.notifications();
+      },
+      onUpdateView: (viewModel) => {
+        render(<App client={client} viewModel={viewModel} />);
+      },
+      onShowDesktopNotification: (ntf) => {
+        new Notification(ntf.title, {
+          body: ntf.body,
+        }).onclick = () => {
+          window.myAPI.openExternal(ntf.url);
+        };
+      },
+      onClose: (e) => {
+        let timeToReconnect = 5 + 1;
+        const timer = setInterval(() => {
+          timeToReconnect--;
+          render(
+            <ConnectionClosed
+              onReconnect={() => {
+                clearInterval(timer);
+                connect();
+              }}
+              timeToReconnect={timeToReconnect}
+            />
+          );
+          if (timeToReconnect === 0) {
+            clearInterval(timer);
+            connect();
+          }
+        }, 1000);
+      },
+    });
   }
-);
+  render(<Connecting />);
+  setTimeout(doConnect); // avoiding stack overflow
+}
 
 class Client {
   constructor(ws) {
@@ -181,8 +143,6 @@ class Client {
     );
   }
 }
-
-const client = new Client(reconnectableWebSocket);
 
 function App({ client, viewModel }) {
   if (viewModel.stateClass === "LoadingState") {
@@ -224,15 +184,17 @@ function App({ client, viewModel }) {
   return null;
 }
 
-function WebsocketError(props) {
+function Connecting(props) {
+  return <div>Connecting...</div>;
+}
+
+function ConnectionClosed(props) {
   return (
     <div>
-      Websocket Error! Reconnect in {props.timeToReconnect} second(s)...
-      <button onClick={props.onReconnect} disabled={!props.onReconnect}>
-        Reconnect now
-      </button>
+      Connection closed! Reconnect in {props.timeToReconnect} second(s)...
+      <button onClick={props.onReconnect}>Reconnect now</button>
     </div>
   );
 }
 
-reconnectableWebSocket.reconnect();
+connect();
