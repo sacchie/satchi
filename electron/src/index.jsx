@@ -50,6 +50,69 @@ function NotificationCard(props) {
   );
 }
 
+function addListenersToWebSocket(ws, listeners) {
+  ws.addEventListener("open", listeners.onOpen);
+  ws.onmessage = (msg) => {
+    const outMessage = JSON.parse(msg.data);
+    switch (outMessage.type) {
+      case "UpdateView":
+        listeners.onUpdateView(outMessage.value);
+        break;
+      case "ShowDesktopNotification":
+        listeners.onShowDesktopNotification(outMessage.value);
+        break;
+    }
+  };
+  ws.onclose = listeners.onClose;
+}
+
+function render(component) {
+  ReactDOM.render(component, document.getElementById("app"));
+}
+
+function connect() {
+  function doConnect() {
+    const ws = new WebSocket("ws://localhost:8037/connect");
+    const client = new Client(ws);
+    addListenersToWebSocket(ws, {
+      onOpen: () => {
+        client.notifications();
+      },
+      onUpdateView: (viewModel) => {
+        render(<App client={client} viewModel={viewModel} />);
+      },
+      onShowDesktopNotification: (ntf) => {
+        new Notification(ntf.title, {
+          body: ntf.body,
+        }).onclick = () => {
+          window.myAPI.openExternal(ntf.url);
+        };
+      },
+      onClose: (e) => {
+        let timeToReconnect = 5 + 1;
+        const timer = setInterval(() => {
+          timeToReconnect--;
+          render(
+            <ConnectionClosed
+              onReconnect={() => {
+                clearInterval(timer);
+                connect();
+              }}
+              timeToReconnect={timeToReconnect}
+            />
+          );
+          if (timeToReconnect === 0) {
+            clearInterval(timer);
+            connect();
+          }
+        }, 1000);
+      },
+    });
+  }
+  render(<Connecting />);
+  setTimeout(doConnect); // avoiding stack overflow
+}
+
 class Client {
   constructor(ws) {
     this.ws = ws;
@@ -121,29 +184,17 @@ function App({ client, viewModel }) {
   return null;
 }
 
-const ws = new WebSocket("ws://localhost:8037/connect");
-const client = new Client(ws);
+function Connecting(props) {
+  return <div>Connecting...</div>;
+}
 
-ws.onmessage = (msg) => {
-  const outMessage = JSON.parse(msg.data);
-  switch (outMessage.type) {
-    case "UpdateView":
-      ReactDOM.render(
-        <App client={client} viewModel={outMessage.value} />,
-        document.getElementById("app")
-      );
-      break;
-    case "ShowDesktopNotification":
-      new Notification(outMessage.value.title, {
-        body: outMessage.value.body,
-      }).onclick = (event) => {
-        window.myAPI.openExternal(outMessage.value.url);
-      };
-      console.log("ShowDesktopNotification", outMessage);
-      break;
-  }
-};
+function ConnectionClosed(props) {
+  return (
+    <div>
+      Connection closed! Reconnect in {props.timeToReconnect} second(s)...
+      <button onClick={props.onReconnect}>Reconnect now</button>
+    </div>
+  );
+}
 
-ws.addEventListener("open", (event) => {
-  client.notifications();
-});
+connect();
