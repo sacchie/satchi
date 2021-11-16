@@ -74,8 +74,7 @@ class ReconnectableWebSocket {
       this.onOpen();
     });
 
-    // 通常oncloseにはならないはずなのでerrorのcbをつめておく
-    this.ws.onclose = this.ws.onerror = () => {
+    this.ws.onclose = (e) => {
       this.isReconnecting = false;
       this.onError();
       this.ws = undefined;
@@ -94,12 +93,39 @@ class ReconnectableWebSocket {
   }
 }
 
+let timer;
+
 const reconnectableWebSocket = new ReconnectableWebSocket(
   () => {
-    ReactDOM.render(
-      <WebsocketError onReconnect={() => reconnectableWebSocket.reconnect()} />,
-      document.getElementById("app")
-    );
+    let timeToReconnect = 5 + 1;
+    timer && clearInterval(timer);
+    timer = setInterval(() => {
+      timeToReconnect--;
+      ReactDOM.render(
+        <WebsocketError
+          onReconnect={
+            timeToReconnect > 0
+              ? () => {
+                  console.log("reconnect by button", timer);
+                  reconnectableWebSocket.reconnect();
+                  timer && clearInterval(timer);
+                  timer = undefined;
+                  console.log("timer cleared by button");
+                }
+              : undefined
+          }
+          timeToReconnect={timeToReconnect}
+        />,
+        document.getElementById("app")
+      );
+      if (timeToReconnect === 0) {
+        console.log("reconnect by timer", timer);
+        timer && clearInterval(timer);
+        reconnectableWebSocket.reconnect();
+        timer = undefined;
+        console.log("timer cleared by timer");
+      }
+    }, 1000);
   },
   () => {
     client.notifications();
@@ -201,8 +227,10 @@ function App({ client, viewModel }) {
 function WebsocketError(props) {
   return (
     <div>
-      Websocket Error!
-      <button onClick={props.onReconnect}>Reconnect</button>
+      Websocket Error! Reconnect in {props.timeToReconnect} second(s)...
+      <button onClick={props.onReconnect} disabled={!props.onReconnect}>
+        Reconnect now
+      </button>
     </div>
   );
 }
