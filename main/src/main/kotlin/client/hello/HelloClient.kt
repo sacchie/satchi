@@ -6,7 +6,7 @@ import java.time.OffsetDateTime
 import java.time.ZoneOffset
 
 class HelloClient : Client {
-    var notifications: List<Notification> = List(5) { i ->
+    override fun fetchNotifications(): List<Notification> = List(5) { i ->
         Notification(
             OffsetDateTime.now(ZoneOffset.UTC),
             Notification.Source("source name", "https://example.com/source/url", null),
@@ -16,6 +16,4 @@ class HelloClient : Client {
             i.toString()
         )
     }
-
-    override fun fetchNotifications(): List<Notification> = notifications
 }
