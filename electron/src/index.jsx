@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import ReactDOM from "react-dom";
 import Card from "@material-ui/core/Card";
 import CardContent from "@material-ui/core/CardContent";
@@ -13,6 +13,8 @@ import Typography from "@material-ui/core/Typography";
 import AppBar from "@material-ui/core/AppBar";
 import Toolbar from "@material-ui/core/Toolbar";
 import Checkbox from "@material-ui/core/Checkbox";
+import SearchIcon from "@material-ui/icons/Search";
+import Input from "@material-ui/core/Input";
 
 function NotificationCard(props) {
   const avatar = props.source.iconUrl ? (
@@ -142,9 +144,20 @@ class Client {
       })
     );
   }
+
+  changeFilterKeyword(keyword) {
+    this.ws.send(
+      JSON.stringify({
+        op: "ChangeFilterKeyword",
+        args: { keyword },
+      })
+    );
+  }
 }
 
 function App({ client, viewModel }) {
+  const [keyword, setKeyword] = useState("");
+
   if (viewModel.stateClass === "LoadingState") {
     return <div>Loading...</div>;
   }
@@ -157,7 +170,6 @@ function App({ client, viewModel }) {
             <Typography component="h1" variant="h6" color="inherit">
               satchi
             </Typography>
-
             <Checkbox
               checked={viewModel.stateData.isMentionOnly}
               onChange={() => client.toggleMentioned()}
@@ -165,23 +177,55 @@ function App({ client, viewModel }) {
               color="default"
               inputProps={{ "aria-label": "secondary checkbox" }}
             />
+            <SearchBox
+              value={keyword}
+              onChange={(keyword) => {
+                setKeyword(keyword);
+                client.changeFilterKeyword(keyword);
+              }}
+            />
           </Toolbar>
         </AppBar>
-        <div>
-          {viewModel.stateData.notifications.map((n, index) => (
-            <div key={index} style={{ padding: 5 }}>
-              <NotificationCard
-                {...n}
-                onOpen={() => window.myAPI.openExternal(n.source.url)}
-                onMark={() => client.markAsRead(n.id, n.gatewayId)}
-              />
-            </div>
-          ))}
-        </div>
+        <NotificationCardList
+          notifications={viewModel.stateData.notifications}
+          client={client}
+        />
       </>
     );
   }
   return null;
+}
+
+function NotificationCardList({ notifications, client }) {
+  // avoid re-rendering unless notifications are changed, since rendering is slow
+  const cards = useMemo(
+    () =>
+      notifications.map((n, index) => (
+        <div key={index} style={{ padding: 5 }}>
+          <NotificationCard
+            {...n}
+            onOpen={() => window.myAPI.openExternal(n.source.url)}
+            onMark={() => client.markAsRead(n.id, n.gatewayId)}
+          />
+        </div>
+      )),
+    [notifications, client]
+  );
+  return <>{cards}</>;
+}
+
+function SearchBox({ value, onChange }) {
+  return (
+    <>
+      <SearchIcon />
+      <Input
+        // disableUnderline
+        style={{ color: "white" }}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </>
+  );
 }
 
 function Connecting(props) {

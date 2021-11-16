@@ -2,6 +2,7 @@
 src/main/resources/.credential
 src/main/resources/.proxy
 src/main/resources/gateways.yml
+out/
 
 ### Kotlin ###
 # Compiled class file
