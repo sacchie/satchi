@@ -3,7 +3,7 @@ package main
 import java.time.OffsetDateTime
 
 data class ViewModel(val stateClass: String, val stateData: Any?) {
-    data class ViewingData(val isMentionOnly: Boolean, val notifications: List<Notification>)
+    data class ViewingData(val isMentionOnly: Boolean, val notifications: List<Notification>, val incomingNotificationCount: Int)
 
     data class Notification(
         val timestamp: OffsetDateTime,

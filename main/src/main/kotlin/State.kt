@@ -4,10 +4,12 @@ typealias StateUpdater<S> = (currentState: S) -> S
 
 class State(
     var notificationList: main.notificationlist.State,
+    var notificationPool: main.notificationpool.State,
     var filter: main.filter.State,
     var desktopNotification: main.desktopnotification.State,
     val onChangeTriggeringViewUpdate: (
         notificationListState: main.notificationlist.State,
+        notificationPoolState: main.notificationpool.State,
         filterState: main.filter.State,
     ) -> Unit,
     val onChangeTriggeringDesktopNotification: (
@@ -22,7 +24,14 @@ class State(
         notificationList = stateUpdater(notificationList)
         val nextState = notificationList::class.java
         System.err.println("$prevState -> $nextState")
-        onChangeTriggeringViewUpdate(notificationList, filter)
+        onChangeTriggeringViewUpdate(notificationList, notificationPool, filter)
+    }
+
+    @Synchronized
+    @JvmName("updateNotificationPool")
+    fun update(stateUpdater: StateUpdater<main.notificationpool.State>) {
+        notificationPool = stateUpdater(notificationPool)
+        onChangeTriggeringViewUpdate(notificationList, notificationPool, filter)
     }
 
     @Synchronized
@@ -31,7 +40,7 @@ class State(
         val newFilter = stateUpdater(filter)
         if (newFilter != filter) {
             filter = newFilter
-            onChangeTriggeringViewUpdate(notificationList, filter)
+            onChangeTriggeringViewUpdate(notificationList, notificationPool, filter)
         }
     }
 

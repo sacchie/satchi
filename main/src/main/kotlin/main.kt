@@ -14,6 +14,7 @@ import main.filter.changeKeyword
 import main.filter.toggleMentioned
 import main.notificationlist.markAsRead
 import main.notificationlist.viewLatest
+import main.notificationpool.fetchToPool
 import java.net.URL
 import java.net.URLClassLoader
 import java.time.OffsetDateTime
@@ -74,6 +75,7 @@ class Service(
 ) {
     private val state = State(
         main.notificationlist.NullState(),
+        main.notificationpool.State(gateways.map { Pair(it.key, listOf<Notification>()) }.toMap()),
         main.filter.State(false, ""),
         main.desktopnotification.State(
             gateways.map {
@@ -84,19 +86,24 @@ class Service(
             }.toMap()
         ),
 
-        onChangeTriggeringViewUpdate = { notificationListState, filterState ->
+        onChangeTriggeringViewUpdate = { notificationListState, notificationPoolState, filterState ->
             val data: Any? = when (notificationListState) {
                 is main.notificationlist.LoadingState -> null
                 is main.notificationlist.ViewingState -> {
                     val ntfs = notificationListState.holders.flatMap {
                         it.value.getUnread()
                             .filter { if (filterState.isMentionOnly) it.mentioned else true }
-                            .filter { if (filterState.keyword.isBlank()) true else matchKeyword(it, filterState.keyword) }
+                            .filter {
+                                if (filterState.keyword.isBlank()) true else matchKeyword(
+                                    it,
+                                    filterState.keyword
+                                )
+                            }
                             .map { n -> ViewModel.Notification.from(it.key, n) }
                     }
                         .sortedBy { -it.timestamp.toEpochSecond() }
                     // sort from newest to oldest
-                    ViewModel.ViewingData(filterState.isMentionOnly, ntfs)
+                    ViewModel.ViewingData(filterState.isMentionOnly, ntfs, notificationPoolState.notifications.values.sumOf { it.size })
                 }
                 else -> throw RuntimeException()
             }
@@ -129,9 +136,12 @@ class Service(
 
     fun toggleMentioned() = toggleMentioned(state::update)
 
+    fun fetchToPool() = fetchToPool(state::update, gateways)
+
     fun changeFilterKeyword(keyword: String) = changeKeyword(state::update, keyword)
 
-    private fun matchKeyword(ntf: Notification, keyword: String) = ntf.message.contains(keyword) || ntf.title.contains(keyword) || ntf.source.name.contains(keyword)
+    private fun matchKeyword(ntf: Notification, keyword: String) =
+        ntf.message.contains(keyword) || ntf.title.contains(keyword) || ntf.source.name.contains(keyword)
 
     fun sendLatestMentioned() =
         sendLatestMentioned(state::update, gateways.map { Pair(it.key, it.value.client) }.toMap())
@@ -211,5 +221,6 @@ fun main() {
     kotlin.concurrent.timer(null, false, 0, 15 * 1000) {
         System.err.println("timer fired")
         service.sendLatestMentioned()
+        service.fetchToPool()
     }
 }
