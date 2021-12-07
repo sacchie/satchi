@@ -4,7 +4,7 @@ import main.GatewayId
 import main.Notification
 import main.notificationlist.Gateway
 
-data class State(val notifications: Map<GatewayId, List<Notification>>) // TODO init
+data class State(val notifications: Map<GatewayId, List<Notification>>)
 
 fun fetchToPool(updateState: ((currentState: State) -> State) -> Unit, gateways: Map<GatewayId, Gateway>) {
     gateways.forEach { (gatewayId, gateway) ->
@@ -14,7 +14,7 @@ fun fetchToPool(updateState: ((currentState: State) -> State) -> Unit, gateways:
             State(
                 currentState.notifications.map {
                     if (it.key == gatewayId) {
-                        Pair(it.key, it.value + fetched)
+                        Pair(it.key, (it.value + fetched).distinctBy { it.id })
                     } else
                         Pair(it.key, it.value)
                 }.toMap()
