@@ -42,34 +42,89 @@ abstract class Gateway(val client: Client) {
     }
 }
 
-fun viewLatest(updateState: (stateUpdater: StateUpdater) -> Unit, gateways: Map<GatewayId, Gateway>) {
-    updateState { currentState ->
-        when (currentState) {
-            is NullState -> LoadingState(gateways.map { it.key to it.value.makeHolder() }.toMap())
-            is LoadingState -> currentState
-            is ViewingState -> LoadingState(currentState.holders)
-            else -> throw IllegalStateException()
+abstract class Service {
+    abstract fun updateState(stateUpdater: StateUpdater)
+
+    abstract fun getGateways(): Map<GatewayId, Gateway>
+
+    fun viewLatest() {
+        updateState { currentState ->
+            when (currentState) {
+                is NullState -> LoadingState(getGateways().map { it.key to it.value.makeHolder() }.toMap())
+                is LoadingState -> currentState
+                is ViewingState -> LoadingState(currentState.holders)
+                else -> throw IllegalStateException()
+            }
+        }
+
+        getGateways().forEach { (gatewayId, gateway) ->
+            val fetched = gateway.fetchNotifications()
+
+            updateState { currentState ->
+                when (currentState) {
+                    is NullState -> ViewingState(mapOf(Pair(gatewayId, gateway.makeHolder().addToUnread(fetched))))
+                    is LoadingState -> ViewingState(
+                        getGateways().map {
+                            if (it.key == gatewayId) {
+                                Pair(it.key, it.value.makeHolder().addToUnread(fetched))
+                            } else
+                                Pair(it.key, it.value.makeHolder())
+                        }.toMap()
+                    )
+                    is ViewingState -> ViewingState(
+                        currentState.holders.map {
+                            if (it.key == gatewayId) {
+                                Pair(it.key, it.value.addToUnread(fetched))
+                            } else
+                                Pair(it.key, it.value)
+                        }.toMap()
+                    )
+                    else -> throw IllegalStateException()
+                }
+            }
         }
     }
 
-    gateways.forEach { (gatewayId, gateway) ->
-        val fetched = gateway.fetchNotifications()
+    fun fetchToPool() {
+        getGateways().forEach { (gatewayId, gateway) ->
+            val fetched = gateway.fetchNotifications()
+            updateState { currentState ->
+                when (currentState) {
+                    is ViewingState -> ViewingState(
+                        currentState.holders.map {
+                            if (it.key == gatewayId) {
+                                Pair(it.key, it.value.addToPooled(fetched))
+                            } else
+                                Pair(it.key, it.value)
+                        }.toMap()
+                    )
+                    else -> currentState
+                }
+            }
+        }
+    }
 
+    fun viewIncomingNotifications() {
         updateState { currentState ->
             when (currentState) {
-                is NullState -> ViewingState(mapOf(Pair(gatewayId, gateway.makeHolder().addToUnread(fetched))))
-                is LoadingState -> ViewingState(
-                    gateways.map {
-                        if (it.key == gatewayId) {
-                            Pair(it.key, it.value.makeHolder().addToUnread(fetched))
-                        } else
-                            Pair(it.key, it.value.makeHolder())
+                is ViewingState -> ViewingState(
+                    currentState.holders.map {
+                        it.key to it.value.flushPool()
                     }.toMap()
                 )
+                else -> currentState
+            }
+        }
+    }
+
+    fun markAsRead(gatewayId: GatewayId, notificationId: NotificationId) {
+        updateState { currentState ->
+            when (currentState) {
+                is LoadingState -> currentState
                 is ViewingState -> ViewingState(
                     currentState.holders.map {
                         if (it.key == gatewayId) {
-                            Pair(it.key, it.value.addToUnread(fetched))
+                            Pair(it.key, it.value.read(notificationId))
                         } else
                             Pair(it.key, it.value)
                     }.toMap()
@@ -77,62 +132,9 @@ fun viewLatest(updateState: (stateUpdater: StateUpdater) -> Unit, gateways: Map<
                 else -> throw IllegalStateException()
             }
         }
-    }
-}
 
-fun fetchToPool(updateState: ((currentState: State) -> State) -> Unit, gateways: Map<GatewayId, Gateway>) {
-    gateways.forEach { (gatewayId, gateway) ->
-        val fetched = gateway.fetchNotifications()
-        updateState { currentState ->
-            when (currentState) {
-                is ViewingState -> ViewingState(
-                    currentState.holders.map {
-                        if (it.key == gatewayId) {
-                            Pair(it.key, it.value.addToPooled(fetched))
-                        } else
-                            Pair(it.key, it.value)
-                    }.toMap()
-                )
-                else -> currentState
-            }
-        }
+        getGateways()[gatewayId]!!.markAsRead(notificationId)
     }
-}
-fun viewIncomingNotifications(updateState: (stateUpdater: StateUpdater) -> Unit) {
-    updateState { currentState ->
-        when (currentState) {
-            is ViewingState -> ViewingState(
-                currentState.holders.map {
-                    it.key to it.value.flushPool()
-                }.toMap()
-            )
-            else -> currentState
-        }
-    }
-}
-
-fun markAsRead(
-    updateState: (stateUpdater: StateUpdater) -> Unit,
-    gatewayId: GatewayId,
-    notificationId: NotificationId,
-    gateways: Map<GatewayId, Gateway>
-) {
-    updateState { currentState ->
-        when (currentState) {
-            is LoadingState -> currentState
-            is ViewingState -> ViewingState(
-                currentState.holders.map {
-                    if (it.key == gatewayId) {
-                        Pair(it.key, it.value.read(notificationId))
-                    } else
-                        Pair(it.key, it.value)
-                }.toMap()
-            )
-            else -> throw IllegalStateException()
-        }
-    }
-
-    gateways[gatewayId]!!.markAsRead(notificationId)
 }
 
 // 未読既読管理してくれるClient用

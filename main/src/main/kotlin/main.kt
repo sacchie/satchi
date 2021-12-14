@@ -12,10 +12,8 @@ import io.javalin.websocket.WsContext
 import main.desktopnotification.sendLatestMentioned
 import main.filter.changeKeyword
 import main.filter.toggleMentioned
-import main.notificationlist.NotificationHolder
-import main.notificationlist.fetchToPool
-import main.notificationlist.markAsRead
-import main.notificationlist.viewLatest
+import main.notificationlist.*
+import main.notificationlist.StateUpdater
 import java.net.URL
 import java.net.URLClassLoader
 import java.time.OffsetDateTime
@@ -129,19 +127,22 @@ class Service(
         }
     )
 
-    fun viewLatest() = viewLatest(state::update, gateways)
+    private val notificationList = object : main.notificationlist.Service() {
+        override fun updateState(stateUpdater: StateUpdater) {
+            state.update(stateUpdater)
+        }
+
+        override fun getGateways(): Map<GatewayId, Gateway> = gateways
+    }
+
+    fun viewLatest() = notificationList.viewLatest()
 
     fun markAsRead(gatewayId: GatewayId, notificationId: NotificationId) =
-        markAsRead(
-            state::update,
-            gatewayId,
-            notificationId,
-            gateways
-        )
+        notificationList.markAsRead(gatewayId, notificationId)
 
     fun toggleMentioned() = toggleMentioned(state::update)
 
-    fun fetchToPool() = fetchToPool(state::update, gateways)
+    fun fetchToPool() = notificationList.fetchToPool()
 
     fun changeFilterKeyword(keyword: String) = changeKeyword(state::update, keyword)
 
@@ -151,9 +152,7 @@ class Service(
     fun sendLatestMentioned() =
         sendLatestMentioned(state::update, gateways.map { Pair(it.key, it.value.client) }.toMap())
 
-    fun viewIncomingNotifications() {
-        main.notificationlist.viewIncomingNotifications(state::update)
-    }
+    fun viewIncomingNotifications() = notificationList.viewIncomingNotifications()
 }
 
 fun main() {
