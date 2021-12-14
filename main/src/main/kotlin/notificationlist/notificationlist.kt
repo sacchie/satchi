@@ -20,6 +20,8 @@ interface NotificationHolder {
     fun addToPooled(added: List<Notification>): NotificationHolder
 
     fun read(id: NotificationId): NotificationHolder
+
+    fun flushPool(): NotificationHolder
 }
 
 class NullState : State
@@ -96,6 +98,18 @@ fun fetchToPool(updateState: ((currentState: State) -> State) -> Unit, gateways:
         }
     }
 }
+fun viewIncomingNotifications(updateState: (stateUpdater: StateUpdater) -> Unit) {
+    updateState { currentState ->
+        when (currentState) {
+            is ViewingState -> ViewingState(
+                currentState.holders.map {
+                    it.key to it.value.flushPool()
+                }.toMap()
+            )
+            else -> currentState
+        }
+    }
+}
 
 fun markAsRead(
     updateState: (stateUpdater: StateUpdater) -> Unit,
@@ -147,6 +161,10 @@ private class ManagedGateway(
         override fun read(id: NotificationId): NotificationHolder {
             return Holder(unread.filter { it.id != id }, pooled.filter { it.id != id })
         }
+
+        override fun flushPool(): NotificationHolder {
+            return Holder(unread + pooled, listOf())
+        }
     }
 
     override fun makeHolder(): Holder {
@@ -182,6 +200,10 @@ private class UnmanagedGateway(
 
         override fun read(id: NotificationId): NotificationHolder {
             return Holder(all, unreadIds - id, pooledIds - id)
+        }
+
+        override fun flushPool(): NotificationHolder {
+            return Holder(all, unreadIds + pooledIds, setOf())
         }
     }
 

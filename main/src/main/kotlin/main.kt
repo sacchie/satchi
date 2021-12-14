@@ -26,7 +26,8 @@ const val MAIN_URL = "http://localhost:8037"
 
 data class InMessage(val op: OpType, val args: Map<String, Object>?) {
     enum class OpType {
-        Notifications, MarkAsRead, ToggleMentioned, ChangeFilterKeyword
+        Notifications, MarkAsRead, ToggleMentioned, ChangeFilterKeyword,
+        ViewIncomingNotifications
     }
 }
 
@@ -149,6 +150,10 @@ class Service(
 
     fun sendLatestMentioned() =
         sendLatestMentioned(state::update, gateways.map { Pair(it.key, it.value.client) }.toMap())
+
+    fun viewIncomingNotifications() {
+        main.notificationlist.viewIncomingNotifications(state::update)
+    }
 }
 
 fun main() {
@@ -203,6 +208,7 @@ fun main() {
                     InMessage.OpType.ToggleMentioned ->
                         service.toggleMentioned()
                     InMessage.OpType.ChangeFilterKeyword -> service.changeFilterKeyword(msg.args!!["keyword"].toString())
+                    InMessage.OpType.ViewIncomingNotifications -> service.viewIncomingNotifications()
                 }
             }
             ws.onClose { ctx ->

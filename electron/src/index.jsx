@@ -155,6 +155,14 @@ class Client {
       })
     );
   }
+
+  viewIncomingNotifications() {
+    this.ws.send(
+      JSON.stringify({
+        op: "ViewIncomingNotifications",
+      })
+    );
+  }
 }
 
 function App({ client, viewModel }) {
@@ -188,6 +196,7 @@ function App({ client, viewModel }) {
             />
             <IncomingNotificationsButton
               count={viewModel.stateData.incomingNotificationCount}
+              onClick={() => client.viewIncomingNotifications()}
             />
           </Toolbar>
         </AppBar>
@@ -233,12 +242,17 @@ function SearchBox({ value, onChange }) {
   );
 }
 
-function IncomingNotificationsButton({ count }) {
+function IncomingNotificationsButton({ count, onClick }) {
   if (count <= 0) {
     return null;
   }
   return (
-    <Button variant="contained" color="primary" startIcon={<MailIcon />}>
+    <Button
+      variant="contained"
+      color="primary"
+      startIcon={<MailIcon />}
+      onClick={onClick}
+    >
       {`Load ${count} incoming notifications`}
     </Button>
   );
