@@ -13,7 +13,11 @@ interface State
 interface NotificationHolder {
     fun getUnread(): List<Notification>
 
-    fun addToUnread(ntfs: List<Notification>): NotificationHolder
+    val pooledCount: Int
+
+    fun addToUnread(added: List<Notification>): NotificationHolder
+
+    fun addToPooled(added: List<Notification>): NotificationHolder
 
     fun read(id: NotificationId): NotificationHolder
 }
@@ -74,6 +78,25 @@ fun viewLatest(updateState: (stateUpdater: StateUpdater) -> Unit, gateways: Map<
     }
 }
 
+fun fetchToPool(updateState: ((currentState: State) -> State) -> Unit, gateways: Map<GatewayId, Gateway>) {
+    gateways.forEach { (gatewayId, gateway) ->
+        val fetched = gateway.fetchNotifications()
+        updateState { currentState ->
+            when (currentState) {
+                is ViewingState -> ViewingState(
+                    currentState.holders.map {
+                        if (it.key == gatewayId) {
+                            Pair(it.key, it.value.addToPooled(fetched))
+                        } else
+                            Pair(it.key, it.value)
+                    }.toMap()
+                )
+                else -> currentState
+            }
+        }
+    }
+}
+
 fun markAsRead(
     updateState: (stateUpdater: StateUpdater) -> Unit,
     gatewayId: GatewayId,
@@ -102,20 +125,32 @@ fun markAsRead(
 private class ManagedGateway(
     client: Client
 ) : Gateway(client) {
-    data class Holder(private val unread: List<Notification>) : NotificationHolder {
+    data class Holder(
+        private val unread: List<Notification>,
+        private val pooled: List<Notification>
+    ) : NotificationHolder {
         override fun getUnread() = unread
 
-        override fun addToUnread(ntfs: List<Notification>): NotificationHolder {
-            return Holder((unread + ntfs).distinctBy(Notification::id))
+        override val pooledCount: Int
+            get() = pooled.size
+
+        override fun addToUnread(added: List<Notification>): NotificationHolder {
+            val addedIds = added.map(Notification::id).distinct().toSet()
+            return Holder((unread + added).distinctBy(Notification::id), pooled.filter { it.id !in addedIds })
+        }
+
+        override fun addToPooled(added: List<Notification>): NotificationHolder {
+            val unreadIds = unread.map(Notification::id).distinct().toSet()
+            return Holder(unread, pooled + added.filter { it.id !in unreadIds })
         }
 
         override fun read(id: NotificationId): NotificationHolder {
-            return Holder(unread.filter { it.id != id })
+            return Holder(unread.filter { it.id != id }, pooled.filter { it.id != id })
         }
     }
 
     override fun makeHolder(): Holder {
-        return Holder(listOf())
+        return Holder(listOf(), listOf())
     }
 }
 
@@ -125,23 +160,33 @@ private class UnmanagedGateway(
 ) : Gateway(client) {
     data class Holder(
         private val all: List<Notification>,
-        private val read: Set<NotificationId>
+        private val unreadIds: Set<NotificationId>,
+        private val pooledIds: Set<NotificationId>
     ) : NotificationHolder {
         override fun getUnread(): List<Notification> {
-            return all.filter { !read.contains(it.id) }
+            return all.filter { it.id in unreadIds }
         }
 
-        override fun addToUnread(ntfs: List<Notification>): NotificationHolder {
-            return Holder((all + ntfs).distinctBy(Notification::id), read)
+        override val pooledCount: Int
+            get() = pooledIds.size
+
+        override fun addToUnread(added: List<Notification>): NotificationHolder {
+            val addedIds = added.map(Notification::id).distinct().toSet()
+            return Holder((all + added).distinctBy(Notification::id), unreadIds + addedIds, pooledIds - addedIds)
+        }
+
+        override fun addToPooled(added: List<Notification>): NotificationHolder {
+            val addedIds = added.map(Notification::id).distinct().toSet()
+            return Holder((all + added).distinctBy(Notification::id), unreadIds, pooledIds + addedIds - unreadIds)
         }
 
         override fun read(id: NotificationId): NotificationHolder {
-            return Holder(all, read + id)
+            return Holder(all, unreadIds - id, pooledIds - id)
         }
     }
 
     override fun makeHolder(): Holder {
-        return Holder(listOf(), setOf())
+        return Holder(listOf(), setOf(), setOf())
     }
 }
 

@@ -12,9 +12,10 @@ import io.javalin.websocket.WsContext
 import main.desktopnotification.sendLatestMentioned
 import main.filter.changeKeyword
 import main.filter.toggleMentioned
+import main.notificationlist.NotificationHolder
+import main.notificationlist.fetchToPool
 import main.notificationlist.markAsRead
 import main.notificationlist.viewLatest
-import main.notificationpool.fetchToPool
 import java.net.URL
 import java.net.URLClassLoader
 import java.time.OffsetDateTime
@@ -75,7 +76,6 @@ class Service(
 ) {
     private val state = State(
         main.notificationlist.NullState(),
-        main.notificationpool.State(gateways.map { Pair(it.key, listOf<Notification>()) }.toMap()),
         main.filter.State(false, ""),
         main.desktopnotification.State(
             gateways.map {
@@ -86,7 +86,7 @@ class Service(
             }.toMap()
         ),
 
-        onChangeTriggeringViewUpdate = { notificationListState, notificationPoolState, filterState ->
+        onChangeTriggeringViewUpdate = { notificationListState, filterState ->
             val data: Any? = when (notificationListState) {
                 is main.notificationlist.LoadingState -> null
                 is main.notificationlist.ViewingState -> {
@@ -103,7 +103,11 @@ class Service(
                     }
                         .sortedBy { -it.timestamp.toEpochSecond() }
                     // sort from newest to oldest
-                    ViewModel.ViewingData(filterState.isMentionOnly, ntfs, notificationPoolState.notifications.values.sumOf { it.size })
+                    ViewModel.ViewingData(
+                        filterState.isMentionOnly,
+                        ntfs,
+                        notificationListState.holders.values.sumOf(NotificationHolder::pooledCount)
+                    )
                 }
                 else -> throw RuntimeException()
             }
