@@ -10,6 +10,7 @@ import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import io.javalin.Javalin
 import io.javalin.websocket.WsContext
 import main.notificationlist.NotificationHolder
+import main.timemachine.Output
 import java.net.URL
 import java.net.URLClassLoader
 import java.time.OffsetDateTime
@@ -68,6 +69,7 @@ data class State(
     var notificationList: main.notificationlist.State,
     var filter: main.filter.State,
     var desktopNotification: main.desktopnotification.State,
+    var timeMachine: main.timemachine.State
 )
 
 class Service(
@@ -85,39 +87,58 @@ class Service(
                     main.desktopnotification.SentNotificationHolder(listOf())
                 )
             }.toMap()
-        )
+        ),
+        main.timemachine.State(gateways.map { Pair(it.key, "") }.toMap())
     )
 
-    private val notificationListService = object : main.notificationlist.Service() {
-        @Synchronized
+    private val notificationListService = object : main.notificationlist.Service {
         override fun updateState(stateUpdater: main.notificationlist.StateUpdater) {
-            val prevState = state.notificationList::class.java
-            state.notificationList = stateUpdater(state.notificationList)
-            val nextState = state.notificationList::class.java
-            System.err.println("$prevState -> $nextState")
-            onChangeTriggeringViewUpdate(state.notificationList, state.filter)
+            synchronized(this) {
+                val prevState = state.notificationList::class.java
+                state.notificationList = stateUpdater(state.notificationList)
+                val nextState = state.notificationList::class.java
+                System.err.println("$prevState -> $nextState")
+                onChangeTriggeringViewUpdate(state.notificationList, state.filter)
+            }
         }
 
         override fun getGateways(): Gateways = gateways
     }
 
-    private val filterService = object : main.filter.Service() {
-        @Synchronized
+    private val filterService = object : main.filter.Service {
         override fun updateState(stateUpdater: main.filter.StateUpdater) {
-            val newFilter = stateUpdater(state.filter)
-            if (newFilter != state.filter) {
-                state.filter = newFilter
-                onChangeTriggeringViewUpdate(state.notificationList, state.filter)
+            synchronized(this) {
+                val newFilter = stateUpdater(state.filter)
+                if (newFilter != state.filter) {
+                    state.filter = newFilter
+                    onChangeTriggeringViewUpdate(state.notificationList, state.filter)
+                }
             }
         }
     }
 
-    private val desktopNotificationService = object : main.desktopnotification.Service() {
-        @Synchronized
+    private val desktopNotificationService = object : main.desktopnotification.Service {
         override fun updateState(stateUpdater: main.desktopnotification.StateUpdater) {
-            val newState = stateUpdater(state.desktopNotification)
-            onChangeTriggeringDesktopNotification(newState, state.desktopNotification)
-            state.desktopNotification = newState
+            synchronized(this) {
+                val newState = stateUpdater(state.desktopNotification)
+                onChangeTriggeringDesktopNotification(newState, state.desktopNotification)
+                state.desktopNotification = newState
+            }
+        }
+
+        override fun getGatewayClients(): Map<GatewayId, Client> =
+            gateways.map { Pair(it.key, it.value.client) }.toMap()
+    }
+
+    private val timeMachineService = object : main.timemachine.Service {
+        override fun updateState(stateUpdater: main.timemachine.StateUpdater) {
+            var output: Output?
+            synchronized(this) {
+                val pair = stateUpdater(state.timeMachine)
+                state.timeMachine = pair.first
+                output = pair.second
+            }
+            output?.let { notificationListService.onUnreadFetched(it.gatewayId, it.ntfs) }
         }
 
         override fun getGatewayClients(): Map<GatewayId, Client> =
@@ -144,6 +165,7 @@ class Service(
                         .map { n -> ViewModel.Notification.from(it.key, n) }
                 }
                     .sortedBy { -it.timestamp.toEpochSecond() }
+                    .take(100)
                 // sort from newest to oldest
                 ViewModel.ViewingData(
                     filterState.isMentionOnly,
@@ -189,6 +211,8 @@ class Service(
 
     fun matchKeyword(ntf: Notification, keyword: String) =
         ntf.message.contains(keyword) || ntf.title.contains(keyword) || ntf.source.name.contains(keyword)
+
+    fun fetchBack() = timeMachineService.fetchBack()
 }
 
 fun main() {
@@ -267,5 +291,6 @@ fun main() {
         System.err.println("timer fired")
         service.sendLatestMentioned()
         service.fetchToPool()
+        service.fetchBack()
     }
 }

@@ -12,10 +12,10 @@ class SentNotificationHolder(val fetched: List<Notification>) {
     fun addToFetched(newlyFetched: List<Notification>): SentNotificationHolder = SentNotificationHolder((fetched + newlyFetched).distinctBy { it.id })
 }
 
-abstract class Service {
-    abstract fun updateState(stateUpdater: StateUpdater)
+interface Service {
+    fun updateState(stateUpdater: StateUpdater)
 
-    abstract fun getGatewayClients(): Map<GatewayId, Client>
+    fun getGatewayClients(): Map<GatewayId, Client>
 
     fun sendLatestMentioned() {
         getGatewayClients().forEach { (gatewayId, client) ->

@@ -4,8 +4,8 @@ data class State(var isMentionOnly: Boolean, var keyword: String)
 
 typealias StateUpdater = (currentState: State) -> State
 
-abstract class Service {
-    abstract fun updateState(stateUpdater: StateUpdater)
+interface Service {
+    fun updateState(stateUpdater: StateUpdater)
 
     fun toggleMentioned() {
         updateState { State(!it.isMentionOnly, it.keyword) }

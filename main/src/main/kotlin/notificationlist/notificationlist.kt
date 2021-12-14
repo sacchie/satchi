@@ -42,10 +42,10 @@ abstract class Gateway(val client: Client) {
     }
 }
 
-abstract class Service {
-    abstract fun updateState(stateUpdater: StateUpdater)
+interface Service {
+    fun updateState(stateUpdater: StateUpdater)
 
-    abstract fun getGateways(): Map<GatewayId, Gateway>
+    fun getGateways(): Map<GatewayId, Gateway>
 
     fun viewLatest() {
         updateState { currentState ->
@@ -134,6 +134,19 @@ abstract class Service {
         }
 
         getGateways()[gatewayId]!!.markAsRead(notificationId)
+    }
+
+    fun onUnreadFetched(gatewayId: GatewayId, ntfs: List<Notification>) {
+        updateState { currentState ->
+            when (currentState) {
+                is ViewingState -> ViewingState(
+                    currentState.holders.map {
+                        it.key to it.value.addToUnread(ntfs)
+                    }.toMap()
+                )
+                else -> currentState
+            }
+        }
     }
 }
 
