@@ -9,11 +9,7 @@ import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import io.javalin.Javalin
 import io.javalin.websocket.WsContext
-import main.desktopnotification.sendLatestMentioned
-import main.filter.changeKeyword
-import main.filter.toggleMentioned
-import main.notificationlist.*
-import main.notificationlist.StateUpdater
+import main.notificationlist.NotificationHolder
 import java.net.URL
 import java.net.URLClassLoader
 import java.time.OffsetDateTime
@@ -42,7 +38,7 @@ data class GatewayDefinition(
     val jarPath: String?
 )
 
-private fun loadGateways(yamlFilename: String): Map<GatewayId, main.notificationlist.Gateway> {
+private fun loadGateways(yamlFilename: String): Gateways {
     val mapper = ObjectMapper(YAMLFactory())
     mapper.registerKotlinModule()
     val classLoader = object {}.javaClass.classLoader
@@ -68,6 +64,12 @@ private fun loadGateways(yamlFilename: String): Map<GatewayId, main.notification
 
 typealias Gateways = Map<GatewayId, main.notificationlist.Gateway>
 
+data class State(
+    var notificationList: main.notificationlist.State,
+    var filter: main.filter.State,
+    var desktopNotification: main.desktopnotification.State,
+)
+
 class Service(
     private val gateways: Gateways,
     private val sendUpdateView: (viewModel: ViewModel) -> Unit,
@@ -83,76 +85,109 @@ class Service(
                     main.desktopnotification.SentNotificationHolder(listOf())
                 )
             }.toMap()
-        ),
-
-        onChangeTriggeringViewUpdate = { notificationListState, filterState ->
-            val data: Any? = when (notificationListState) {
-                is main.notificationlist.LoadingState -> null
-                is main.notificationlist.ViewingState -> {
-                    val ntfs = notificationListState.holders.flatMap {
-                        it.value.getUnread()
-                            .filter { if (filterState.isMentionOnly) it.mentioned else true }
-                            .filter {
-                                if (filterState.keyword.isBlank()) true else matchKeyword(
-                                    it,
-                                    filterState.keyword
-                                )
-                            }
-                            .map { n -> ViewModel.Notification.from(it.key, n) }
-                    }
-                        .sortedBy { -it.timestamp.toEpochSecond() }
-                    // sort from newest to oldest
-                    ViewModel.ViewingData(
-                        filterState.isMentionOnly,
-                        ntfs,
-                        notificationListState.holders.values.sumOf(NotificationHolder::pooledCount)
-                    )
-                }
-                else -> throw RuntimeException()
-            }
-
-            val viewModel = ViewModel(notificationListState.javaClass.simpleName, data)
-            sendUpdateView(viewModel)
-        },
-
-        onChangeTriggeringDesktopNotification = { newState, oldState ->
-            val now = OffsetDateTime.now(ZoneOffset.UTC)
-            val toSend = oldState.holders.flatMap {
-                val gatewayId = it.key
-                val after = newState.holders[gatewayId]!!
-                val before = it.value
-                after.fetched - before.fetched.toSet()
-            }.filter { it.timestamp > now.minusMinutes(5) }
-            sendShowDesktopNotification(toSend)
-        }
+        )
     )
 
-    private val notificationList = object : main.notificationlist.Service() {
-        override fun updateState(stateUpdater: StateUpdater) {
-            state.update(stateUpdater)
+    private val notificationListService = object : main.notificationlist.Service() {
+        @Synchronized
+        override fun updateState(stateUpdater: main.notificationlist.StateUpdater) {
+            val prevState = state.notificationList::class.java
+            state.notificationList = stateUpdater(state.notificationList)
+            val nextState = state.notificationList::class.java
+            System.err.println("$prevState -> $nextState")
+            onChangeTriggeringViewUpdate(state.notificationList, state.filter)
         }
 
-        override fun getGateways(): Map<GatewayId, Gateway> = gateways
+        override fun getGateways(): Gateways = gateways
     }
 
-    fun viewLatest() = notificationList.viewLatest()
+    private val filterService = object : main.filter.Service() {
+        @Synchronized
+        override fun updateState(stateUpdater: main.filter.StateUpdater) {
+            val newFilter = stateUpdater(state.filter)
+            if (newFilter != state.filter) {
+                state.filter = newFilter
+                onChangeTriggeringViewUpdate(state.notificationList, state.filter)
+            }
+        }
+    }
+
+    private val desktopNotificationService = object : main.desktopnotification.Service() {
+        @Synchronized
+        override fun updateState(stateUpdater: main.desktopnotification.StateUpdater) {
+            val newState = stateUpdater(state.desktopNotification)
+            onChangeTriggeringDesktopNotification(newState, state.desktopNotification)
+            state.desktopNotification = newState
+        }
+
+        override fun getGatewayClients(): Map<GatewayId, Client> =
+            gateways.map { Pair(it.key, it.value.client) }.toMap()
+    }
+
+    fun onChangeTriggeringViewUpdate(
+        notificationListState: main.notificationlist.State,
+        filterState: main.filter.State
+    ) {
+        val data: Any? = when (notificationListState) {
+            is main.notificationlist.LoadingState -> null
+            is main.notificationlist.ViewingState -> {
+                val ntfs = notificationListState.holders.flatMap {
+                    it.value.getUnread()
+                        .filter { if (filterState.isMentionOnly) it.mentioned else true }
+                        .filter {
+                            if (filterState.keyword.isBlank()) true else matchKeyword(
+                                it,
+                                filterState.keyword
+                            )
+                        }
+                        .map { n -> ViewModel.Notification.from(it.key, n) }
+                }
+                    .sortedBy { -it.timestamp.toEpochSecond() }
+                // sort from newest to oldest
+                ViewModel.ViewingData(
+                    filterState.isMentionOnly,
+                    ntfs,
+                    notificationListState.holders.values.sumOf(NotificationHolder::pooledCount)
+                )
+            }
+            else -> throw RuntimeException()
+        }
+
+        val viewModel = ViewModel(notificationListState.javaClass.simpleName, data)
+        sendUpdateView(viewModel)
+    }
+
+    fun onChangeTriggeringDesktopNotification(
+        newState: main.desktopnotification.State,
+        oldState: main.desktopnotification.State
+    ) {
+        val now = OffsetDateTime.now(ZoneOffset.UTC)
+        val toSend = oldState.holders.flatMap {
+            val gatewayId = it.key
+            val after = newState.holders[gatewayId]!!
+            val before = it.value
+            after.fetched - before.fetched.toSet()
+        }.filter { it.timestamp > now.minusMinutes(5) }
+        sendShowDesktopNotification(toSend)
+    }
+
+    fun viewLatest() = notificationListService.viewLatest()
 
     fun markAsRead(gatewayId: GatewayId, notificationId: NotificationId) =
-        notificationList.markAsRead(gatewayId, notificationId)
+        notificationListService.markAsRead(gatewayId, notificationId)
 
-    fun toggleMentioned() = toggleMentioned(state::update)
+    fun toggleMentioned() = filterService.toggleMentioned()
 
-    fun fetchToPool() = notificationList.fetchToPool()
+    fun fetchToPool() = notificationListService.fetchToPool()
 
-    fun changeFilterKeyword(keyword: String) = changeKeyword(state::update, keyword)
+    fun changeFilterKeyword(keyword: String) = filterService.changeKeyword(keyword)
 
-    private fun matchKeyword(ntf: Notification, keyword: String) =
+    fun sendLatestMentioned() = desktopNotificationService.sendLatestMentioned()
+
+    fun viewIncomingNotifications() = notificationListService.viewIncomingNotifications()
+
+    fun matchKeyword(ntf: Notification, keyword: String) =
         ntf.message.contains(keyword) || ntf.title.contains(keyword) || ntf.source.name.contains(keyword)
-
-    fun sendLatestMentioned() =
-        sendLatestMentioned(state::update, gateways.map { Pair(it.key, it.value.client) }.toMap())
-
-    fun viewIncomingNotifications() = notificationList.viewIncomingNotifications()
 }
 
 fun main() {
