@@ -6,11 +6,13 @@ import CloseIcon from "@material-ui/icons/Close";
 import CardActions from "@material-ui/core/CardActions";
 import IconButton from "@material-ui/core/IconButton";
 import OpenInBrowserIcon from "@material-ui/icons/OpenInBrowser";
+import MailIcon from "@material-ui/icons/Mail";
 import Tooltip from "@material-ui/core/Tooltip";
 import { CardHeader } from "@material-ui/core";
 import Avatar from "@material-ui/core/Avatar";
 import Typography from "@material-ui/core/Typography";
 import AppBar from "@material-ui/core/AppBar";
+import Button from "@material-ui/core/Button";
 import Toolbar from "@material-ui/core/Toolbar";
 import Checkbox from "@material-ui/core/Checkbox";
 import SearchIcon from "@material-ui/icons/Search";
@@ -153,6 +155,14 @@ class Client {
       })
     );
   }
+
+  viewIncomingNotifications() {
+    this.ws.send(
+      JSON.stringify({
+        op: "ViewIncomingNotifications",
+      })
+    );
+  }
 }
 
 function App({ client, viewModel }) {
@@ -183,6 +193,10 @@ function App({ client, viewModel }) {
                 setKeyword(keyword);
                 client.changeFilterKeyword(keyword);
               }}
+            />
+            <IncomingNotificationsButton
+              count={viewModel.stateData.incomingNotificationCount}
+              onClick={() => client.viewIncomingNotifications()}
             />
           </Toolbar>
         </AppBar>
@@ -225,6 +239,22 @@ function SearchBox({ value, onChange }) {
         onChange={(event) => onChange(event.target.value)}
       />
     </>
+  );
+}
+
+function IncomingNotificationsButton({ count, onClick }) {
+  if (count <= 0) {
+    return null;
+  }
+  return (
+    <Button
+      variant="contained"
+      color="primary"
+      startIcon={<MailIcon />}
+      onClick={onClick}
+    >
+      {`Load ${count} incoming notifications`}
+    </Button>
   );
 }
 

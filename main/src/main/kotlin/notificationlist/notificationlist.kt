@@ -13,9 +13,15 @@ interface State
 interface NotificationHolder {
     fun getUnread(): List<Notification>
 
-    fun addToUnread(ntfs: List<Notification>): NotificationHolder
+    val pooledCount: Int
+
+    fun addToUnread(added: List<Notification>): NotificationHolder
+
+    fun addToPooled(added: List<Notification>): NotificationHolder
 
     fun read(id: NotificationId): NotificationHolder
+
+    fun flushPool(): NotificationHolder
 }
 
 class NullState : State
@@ -36,34 +42,89 @@ abstract class Gateway(val client: Client) {
     }
 }
 
-fun viewLatest(updateState: (stateUpdater: StateUpdater) -> Unit, gateways: Map<GatewayId, Gateway>) {
-    updateState { currentState ->
-        when (currentState) {
-            is NullState -> LoadingState(gateways.map { it.key to it.value.makeHolder() }.toMap())
-            is LoadingState -> currentState
-            is ViewingState -> LoadingState(currentState.holders)
-            else -> throw IllegalStateException()
+abstract class Service {
+    abstract fun updateState(stateUpdater: StateUpdater)
+
+    abstract fun getGateways(): Map<GatewayId, Gateway>
+
+    fun viewLatest() {
+        updateState { currentState ->
+            when (currentState) {
+                is NullState -> LoadingState(getGateways().map { it.key to it.value.makeHolder() }.toMap())
+                is LoadingState -> currentState
+                is ViewingState -> LoadingState(currentState.holders)
+                else -> throw IllegalStateException()
+            }
+        }
+
+        getGateways().forEach { (gatewayId, gateway) ->
+            val fetched = gateway.fetchNotifications()
+
+            updateState { currentState ->
+                when (currentState) {
+                    is NullState -> ViewingState(mapOf(Pair(gatewayId, gateway.makeHolder().addToUnread(fetched))))
+                    is LoadingState -> ViewingState(
+                        getGateways().map {
+                            if (it.key == gatewayId) {
+                                Pair(it.key, it.value.makeHolder().addToUnread(fetched))
+                            } else
+                                Pair(it.key, it.value.makeHolder())
+                        }.toMap()
+                    )
+                    is ViewingState -> ViewingState(
+                        currentState.holders.map {
+                            if (it.key == gatewayId) {
+                                Pair(it.key, it.value.addToUnread(fetched))
+                            } else
+                                Pair(it.key, it.value)
+                        }.toMap()
+                    )
+                    else -> throw IllegalStateException()
+                }
+            }
         }
     }
 
-    gateways.forEach { (gatewayId, gateway) ->
-        val fetched = gateway.fetchNotifications()
+    fun fetchToPool() {
+        getGateways().forEach { (gatewayId, gateway) ->
+            val fetched = gateway.fetchNotifications()
+            updateState { currentState ->
+                when (currentState) {
+                    is ViewingState -> ViewingState(
+                        currentState.holders.map {
+                            if (it.key == gatewayId) {
+                                Pair(it.key, it.value.addToPooled(fetched))
+                            } else
+                                Pair(it.key, it.value)
+                        }.toMap()
+                    )
+                    else -> currentState
+                }
+            }
+        }
+    }
 
+    fun viewIncomingNotifications() {
         updateState { currentState ->
             when (currentState) {
-                is NullState -> ViewingState(mapOf(Pair(gatewayId, gateway.makeHolder().addToUnread(fetched))))
-                is LoadingState -> ViewingState(
-                    gateways.map {
-                        if (it.key == gatewayId) {
-                            Pair(it.key, it.value.makeHolder().addToUnread(fetched))
-                        } else
-                            Pair(it.key, it.value.makeHolder())
+                is ViewingState -> ViewingState(
+                    currentState.holders.map {
+                        it.key to it.value.flushPool()
                     }.toMap()
                 )
+                else -> currentState
+            }
+        }
+    }
+
+    fun markAsRead(gatewayId: GatewayId, notificationId: NotificationId) {
+        updateState { currentState ->
+            when (currentState) {
+                is LoadingState -> currentState
                 is ViewingState -> ViewingState(
                     currentState.holders.map {
                         if (it.key == gatewayId) {
-                            Pair(it.key, it.value.addToUnread(fetched))
+                            Pair(it.key, it.value.read(notificationId))
                         } else
                             Pair(it.key, it.value)
                     }.toMap()
@@ -71,51 +132,45 @@ fun viewLatest(updateState: (stateUpdater: StateUpdater) -> Unit, gateways: Map<
                 else -> throw IllegalStateException()
             }
         }
-    }
-}
 
-fun markAsRead(
-    updateState: (stateUpdater: StateUpdater) -> Unit,
-    gatewayId: GatewayId,
-    notificationId: NotificationId,
-    gateways: Map<GatewayId, Gateway>
-) {
-    updateState { currentState ->
-        when (currentState) {
-            is LoadingState -> currentState
-            is ViewingState -> ViewingState(
-                currentState.holders.map {
-                    if (it.key == gatewayId) {
-                        Pair(it.key, it.value.read(notificationId))
-                    } else
-                        Pair(it.key, it.value)
-                }.toMap()
-            )
-            else -> throw IllegalStateException()
-        }
+        getGateways()[gatewayId]!!.markAsRead(notificationId)
     }
-
-    gateways[gatewayId]!!.markAsRead(notificationId)
 }
 
 // 未読既読管理してくれるClient用
 private class ManagedGateway(
     client: Client
 ) : Gateway(client) {
-    data class Holder(private val unread: List<Notification>) : NotificationHolder {
+    data class Holder(
+        private val unread: List<Notification>,
+        private val pooled: List<Notification>
+    ) : NotificationHolder {
         override fun getUnread() = unread
 
-        override fun addToUnread(ntfs: List<Notification>): NotificationHolder {
-            return Holder((unread + ntfs).distinctBy(Notification::id))
+        override val pooledCount: Int
+            get() = pooled.size
+
+        override fun addToUnread(added: List<Notification>): NotificationHolder {
+            val addedIds = added.map(Notification::id).distinct().toSet()
+            return Holder((unread + added).distinctBy(Notification::id), pooled.filter { it.id !in addedIds })
+        }
+
+        override fun addToPooled(added: List<Notification>): NotificationHolder {
+            val unreadIds = unread.map(Notification::id).distinct().toSet()
+            return Holder(unread, pooled + added.filter { it.id !in unreadIds })
         }
 
         override fun read(id: NotificationId): NotificationHolder {
-            return Holder(unread.filter { it.id != id })
+            return Holder(unread.filter { it.id != id }, pooled.filter { it.id != id })
+        }
+
+        override fun flushPool(): NotificationHolder {
+            return Holder(unread + pooled, listOf())
         }
     }
 
     override fun makeHolder(): Holder {
-        return Holder(listOf())
+        return Holder(listOf(), listOf())
     }
 }
 
@@ -125,23 +180,37 @@ private class UnmanagedGateway(
 ) : Gateway(client) {
     data class Holder(
         private val all: List<Notification>,
-        private val read: Set<NotificationId>
+        private val unreadIds: Set<NotificationId>,
+        private val pooledIds: Set<NotificationId>
     ) : NotificationHolder {
         override fun getUnread(): List<Notification> {
-            return all.filter { !read.contains(it.id) }
+            return all.filter { it.id in unreadIds }
         }
 
-        override fun addToUnread(ntfs: List<Notification>): NotificationHolder {
-            return Holder((all + ntfs).distinctBy(Notification::id), read)
+        override val pooledCount: Int
+            get() = pooledIds.size
+
+        override fun addToUnread(added: List<Notification>): NotificationHolder {
+            val addedIds = added.map(Notification::id).distinct().toSet()
+            return Holder((all + added).distinctBy(Notification::id), unreadIds + addedIds, pooledIds - addedIds)
+        }
+
+        override fun addToPooled(added: List<Notification>): NotificationHolder {
+            val addedIds = added.map(Notification::id).distinct().toSet()
+            return Holder((all + added).distinctBy(Notification::id), unreadIds, pooledIds + addedIds - unreadIds)
         }
 
         override fun read(id: NotificationId): NotificationHolder {
-            return Holder(all, read + id)
+            return Holder(all, unreadIds - id, pooledIds - id)
+        }
+
+        override fun flushPool(): NotificationHolder {
+            return Holder(all, unreadIds + pooledIds, setOf())
         }
     }
 
     override fun makeHolder(): Holder {
-        return Holder(listOf(), setOf())
+        return Holder(listOf(), setOf(), setOf())
     }
 }
 
