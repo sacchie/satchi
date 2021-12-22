@@ -129,6 +129,7 @@ class Service(
         filterState: main.filter.State
     ) {
         val data: Any? = when (notificationListState) {
+            is main.notificationlist.NullState -> return
             is main.notificationlist.LoadingState -> null
             is main.notificationlist.ViewingState -> {
                 val ntfs = notificationListState.holders.flatMap {
