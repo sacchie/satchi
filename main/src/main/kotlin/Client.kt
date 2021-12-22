@@ -7,6 +7,8 @@ interface Client {
     fun fetchNotifications(): List<Notification>
     fun privateIconFetcher(): ((iconId: String) -> InputStream)? = null
     fun markAsReadExecutor(): ((id: NotificationId) -> Unit)? = null
+    fun fetchNotificationsWithOffset(offset: String):
+        Pair<List<Notification>, String> = Pair(listOf(), "")
 }
 
 interface ClientFactory {
