@@ -1,8 +1,8 @@
 import main.Client
+import main.GatewayFactory
 import main.Notification
 import main.Service
 import main.ViewModel
-import main.notificationlist.GatewayFactory
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import strikt.api.expectThat
@@ -165,6 +165,8 @@ internal class ServiceTest {
 
     @Test
     fun `Use can receive new mentioned notifications`() {
+        sut.viewLatest()
+
         mockClient.notifications = listOf(
             Notification(
                 OffsetDateTime.now(ZoneOffset.UTC),

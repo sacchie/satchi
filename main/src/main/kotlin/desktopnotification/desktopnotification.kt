@@ -1,36 +1,24 @@
 package main.desktopnotification
 
 import main.Client
-import main.GatewayId
 import main.Notification
+import main.NotificationId
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 
-data class State(val holders: Map<GatewayId, SentNotificationHolder>)
-
-typealias StateUpdater = (currentState: State) -> State
-
-class SentNotificationHolder(val fetched: List<Notification>) {
-    fun addToFetched(newlyFetched: List<Notification>): SentNotificationHolder = SentNotificationHolder((fetched + newlyFetched).distinctBy { it.id })
-}
+typealias Updater = (update: (cur: Set<NotificationId>) -> Set<NotificationId>) -> Unit
 
 interface Service {
-    fun updateState(stateUpdater: StateUpdater)
-
-    fun getGatewayClients(): Map<GatewayId, Client>
-
-    fun sendLatestMentioned() {
-        getGatewayClients().forEach { (gatewayId, client) ->
+    fun run(update: Updater, client: Client) {
+        update { curr ->
             val newlyFetched = client.fetchNotifications().filter { it.mentioned }
-            updateState { currentState ->
-                State(
-                    currentState.holders.map {
-                        if (it.key == gatewayId) {
-                            Pair(it.key, it.value.addToFetched(newlyFetched))
-                        } else {
-                            Pair(it.key, it.value)
-                        }
-                    }.toMap()
-                )
-            }
+            val now = OffsetDateTime.now(ZoneOffset.UTC)
+            val toSend = newlyFetched.filter { it.id !in curr }
+                .filter { it.timestamp > now.minusMinutes(5) }
+            send(toSend)
+            curr + toSend.map { it.id }
         }
     }
+
+    fun send(notifications: List<Notification>)
 }
