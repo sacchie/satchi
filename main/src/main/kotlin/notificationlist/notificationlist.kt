@@ -157,7 +157,7 @@ private class ManagedGateway(
 
         override fun addToPooled(added: List<Notification>): NotificationHolder {
             val unreadIds = unread.map(Notification::id).distinct().toSet()
-            return Holder(unread, pooled + added.filter { it.id !in unreadIds })
+            return Holder(unread, (pooled + added.filter { it.id !in unreadIds }).distinctBy(Notification::id))
         }
 
         override fun read(id: NotificationId): NotificationHolder {
@@ -165,7 +165,7 @@ private class ManagedGateway(
         }
 
         override fun flushPool(): NotificationHolder {
-            return Holder(unread + pooled, listOf())
+            return Holder((unread + pooled).distinctBy(Notification::id), listOf())
         }
     }
 
