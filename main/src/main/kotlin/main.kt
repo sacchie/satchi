@@ -178,7 +178,6 @@ class Service(
                     doOnlyWhenViewingState { state ->
                         val gatewayState = state.gatewayStateSet.getState(gatewayId)
                         gatewayState.notificationHolder = gatewayState.notificationHolder.flushPool()
-                        System.err.println("Updating NotificationHolder")
                         onChangeTriggeringViewUpdate()
                     }
                 }
@@ -193,6 +192,7 @@ class Service(
                         gatewayState.apply {
                             notificationHolder = notificationHolder.addToUnread(ntfs)
                             timeMachineOffset = nextOffset
+                            System.err.println("fetchBack(): #unreads=${notificationHolder.getUnread().size}, gatewayId=$gatewayId")
                         }
                         onChangeTriggeringViewUpdate()
                     }
@@ -276,7 +276,7 @@ class Service(
             System.err.println("timer fired")
             service.sendLatestMentioned()
             service.fetchToPool()
-//        service.fetchBack()
+            service.fetchBack()
         }
     }
     
