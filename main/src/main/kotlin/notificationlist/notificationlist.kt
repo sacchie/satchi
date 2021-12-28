@@ -2,14 +2,17 @@ package main.notificationlist
 
 import main.*
 
-typealias NotificationHolderUpdater = (update: (cur: NotificationHolder) -> NotificationHolder) -> Unit
-
-fun fetchToPool(update: NotificationHolderUpdater, client: Client) {
-    val fetched = client.fetchNotifications()
-    update { it.addToPooled(fetched) }
+interface NotificationHolderAccessor {
+    fun addToPooled(added: List<Notification>)
+    fun read(notificationId: NotificationId)
 }
 
-fun markAsRead(update: NotificationHolderUpdater, notificationId: NotificationId, client: Client) {
-    update { cur -> cur.read(notificationId) }
+fun fetchToPool(accessor: NotificationHolderAccessor, client: Client) {
+    val fetched = client.fetchNotifications()
+    accessor.addToPooled(fetched)
+}
+
+fun markAsRead(accessor: NotificationHolderAccessor, notificationId: NotificationId, client: Client) {
+    accessor.read(notificationId)
     client.markAsReadExecutor()?.let { mark -> mark(notificationId) }
 }
