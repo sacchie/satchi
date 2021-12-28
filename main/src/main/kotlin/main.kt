@@ -266,7 +266,10 @@ class Service(
                     val gatewayId = ctx.queryParam("gatewayId")!!
                     val iconId = ctx.queryParam("iconId")!!
                     gateways[gatewayId]?.let { gw ->
-                        gw.fetchIcon(iconId)?.let { ctx.result(it) }
+                        gw.fetchIcon(iconId)?.let {
+                            ctx.result(it)
+                            ctx.header("Cache-Control", "max-age=315360000")
+                        }
                     }
                 }
             }
