@@ -58,6 +58,25 @@ internal class ServiceTest {
     }
 
     @Test
+    fun `User can view at most 100 notifications`() {
+        mockClient.notifications = (1..101).map {
+            Notification(
+                OffsetDateTime.now(ZoneOffset.UTC),
+                Notification.Source("source name", "https://example.com/source/url", null),
+                "title",
+                "Hello",
+                false,
+                it.toString(),
+            )
+        }
+
+        sut.viewLatest()
+        (sentViewModels.last().stateData as ViewModel.ViewingData).let {
+            expectThat(it.notifications.size).isEqualTo(100)
+        }
+    }
+
+    @Test
     fun `User can remove a read notification from the list`() {
         mockClient.notifications = listOf(
             Notification(
@@ -164,7 +183,7 @@ internal class ServiceTest {
     }
 
     @Test
-    fun `Use can receive new mentioned notifications`() {
+    fun `User can receive new mentioned notifications`() {
         sut.viewLatest()
 
         mockClient.notifications = listOf(
@@ -197,9 +216,83 @@ internal class ServiceTest {
         expectThat(sentDesktopNotifications.size).isEqualTo(2)
         expectThat(sentDesktopNotifications.map { it.id }).containsExactly("1", "3")
     }
+
+    @Test
+    fun `User can notice that new notifications exist and then view the notifications`() {
+        sut.viewLatest()
+        mockClient.notifications = listOf(
+            Notification(
+                OffsetDateTime.now(ZoneOffset.UTC),
+                Notification.Source("source name", "https://example.com/source/url", null),
+                "title",
+                "Hello",
+                false,
+                "1"
+            )
+        )
+        sentViewModels.clear()
+        sut.fetchToPool()
+
+        (sentViewModels.last().stateData as ViewModel.ViewingData).let {
+            expectThat(it.notifications.size).isEqualTo(0)
+            expectThat(it.incomingNotificationCount).isEqualTo(1)
+        }
+
+        sut.viewIncomingNotifications()
+
+        (sentViewModels.last().stateData as ViewModel.ViewingData).let {
+            expectThat(it.notifications.size).isEqualTo(1)
+            expectThat(it.incomingNotificationCount).isEqualTo(0)
+        }
+    }
+
+    @Test
+    fun `User can view the 101st mentioned notification`() {
+        mockClient.notifications = (1..100).map {
+            Notification(
+                OffsetDateTime.now(ZoneOffset.UTC),
+                Notification.Source("source name", "https://example.com/source/url", null),
+                "title",
+                "Hello",
+                false,
+                it.toString()
+            )
+        }
+
+        sut.viewLatest()
+        (sentViewModels.last().stateData as ViewModel.ViewingData).let {
+            expectThat(it.notifications.size).isEqualTo(100)
+        }
+
+        sut.toggleMentioned()
+        (sentViewModels.last().stateData as ViewModel.ViewingData).let {
+            expectThat(it.notifications.size).isEqualTo(0)
+        }
+
+        mockClient.notificationsWithOffset = Pair(
+            listOf(
+                Notification(
+                    OffsetDateTime.now(ZoneOffset.UTC),
+                    Notification.Source("source name", "https://example.com/source/url", null),
+                    "title",
+                    "Hello",
+                    true,
+                    "101"
+                )
+            ),
+            ""
+        )
+        sut.fetchBack()
+
+        (sentViewModels.last().stateData as ViewModel.ViewingData).let {
+            expectThat(it.notifications.size).isEqualTo(1)
+        }
+    }
 }
 
 private class MockClient : Client {
     var notifications: List<Notification> = listOf()
+    var notificationsWithOffset: Pair<List<Notification>, String> = Pair(listOf(), "")
     override fun fetchNotifications(): List<Notification> = notifications
+    override fun fetchNotificationsWithOffset(offset: String): Pair<List<Notification>, String> = notificationsWithOffset
 }
