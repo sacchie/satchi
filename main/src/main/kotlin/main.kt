@@ -5,6 +5,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import io.javalin.Javalin
 import io.javalin.websocket.WsContext
+import java.lang.NullPointerException
 import java.util.*
 
 const val MAIN_URL = "http://localhost:8037"
@@ -275,11 +276,20 @@ class Service(
             }
         }.start(8037) /* 37 = "サッチ" */
 
-        kotlin.concurrent.timer(null, false, 0, 15 * 1000) {
-            System.err.println("timer fired")
-            service.sendLatestMentioned()
-            service.fetchToPool()
-            service.fetchBack()
+        run {
+            var thread: Thread? = null
+            kotlin.concurrent.timer(null, false, 5 * 1000, 10 * 1000) {
+                System.err.println("timer fired")
+                if (thread != null && thread!!.isAlive) {
+                    System.err.println("task skipped")
+                    return@timer
+                }
+                thread = kotlin.concurrent.thread {
+                    service.sendLatestMentioned()
+                    service.fetchToPool()
+                    service.fetchBack()
+                }
+                System.err.println("task executed")
+            }
         }
     }
-    
