@@ -84,7 +84,8 @@ data class GatewayStateSet(private val map: Map<GatewayId, GatewayState>) {
             .sortedBy { -it.second.timestamp.toEpochSecond() } // sort from newest to oldest
             .take(limit)
 
-    fun getPoolCount() = map.values.sumOf(GatewayState::pooledCount)
+    val poolCount: Int
+        get() = map.values.sumOf(GatewayState::pooledCount)
 
     fun flushPool() {
         map.values.forEach(GatewayState::flushPool)

@@ -25,7 +25,16 @@ data class OutMessage(val type: Type, val value: Any) {
 interface State
 class NullState : State
 class LoadingState : State
-data class ViewingState(val gatewayStateSet: GatewayStateSet, val filterState: main.filter.State) : State
+class ViewingState(gatewayStateMap: Map<GatewayId, GatewayState>, val filterState: main.filter.State) : State {
+    private val gatewayStateSet: GatewayStateSet = GatewayStateSet(gatewayStateMap)
+
+    fun getUnread(limit: Int) = gatewayStateSet.getUnread(filterState, limit)
+    val poolCount
+        get() = gatewayStateSet.poolCount
+    fun getAccessorForNotificationList(gatewayId: GatewayId) = gatewayStateSet.getState(gatewayId).getAccessorForNotificationList()
+    fun getGatewayState(gatewayId: GatewayId) = gatewayStateSet.getState(gatewayId)
+    fun flushPool() = gatewayStateSet.flushPool()
+}
 
 class Service(
     private val gateways: Gateways,
@@ -50,12 +59,12 @@ class Service(
             is LoadingState -> null
             is ViewingState -> {
                 val viewingState = state as ViewingState
-                val ntfs = viewingState.gatewayStateSet.getUnread(viewingState.filterState, 100)
+                val ntfs = viewingState.getUnread(100)
                     .map { ViewModel.Notification.from(it.first, it.second) }
                 ViewModel.ViewingData(
                     viewingState.filterState.isMentionOnly,
                     ntfs,
-                    viewingState.gatewayStateSet.getPoolCount()
+                    viewingState.poolCount
                 )
             }
             else -> throw RuntimeException()
@@ -70,14 +79,13 @@ class Service(
             state = LoadingState()
             onChangeTriggeringViewUpdate()
 
-            val gatewayStateSet = GatewayStateSet(
+            val gatewayStateMap =
                 gateways.map { (gatewayId, gateway) ->
                     val fetched = gateway.client.fetchNotifications()
                     gatewayId to GatewayState(gateway.isManaged, fetched)
                 }.toMap()
-            )
 
-            state = ViewingState(gatewayStateSet, main.filter.State(false, ""))
+            state = ViewingState(gatewayStateMap, main.filter.State(false, ""))
         }
         onChangeTriggeringViewUpdate()
     }
@@ -85,9 +93,8 @@ class Service(
     fun markAsRead(gatewayId: GatewayId, notificationId: NotificationId) =
         synchronized(state) {
             doOnlyWhenViewingState { state ->
-                val gatewayState = state.gatewayStateSet.getState(gatewayId)
                 main.notificationlist.markAsRead(
-                    gatewayState.getAccessorForNotificationList(),
+                    state.getAccessorForNotificationList(gatewayId),
                     notificationId,
                     gateways[gatewayId]!!.client
                 )
@@ -107,8 +114,7 @@ class Service(
     fun fetchToPool() = gateways.forEach { (gatewayId, gateway) ->
         synchronized(state) {
             doOnlyWhenViewingState { state ->
-                val gatewayState = state.gatewayStateSet.getState(gatewayId)
-                main.notificationlist.fetchToPool(gatewayState.getAccessorForNotificationList(), gateway.client)
+                main.notificationlist.fetchToPool(state.getAccessorForNotificationList(gatewayId), gateway.client)
                 System.err.println("Updating NotificationHolder")
                 onChangeTriggeringViewUpdate()
             }
@@ -131,7 +137,7 @@ class Service(
     fun sendLatestMentioned() = gateways.forEach { (gatewayId, gateway) ->
         synchronized(state) {
             doOnlyWhenViewingState { state ->
-                val gatewayState = state.gatewayStateSet.getState(gatewayId)
+                val gatewayState = state.getGatewayState(gatewayId)
                 desktopNotificationService.run({ update ->
                     gatewayState.idsDesktopNotificationSent = update(gatewayState.idsDesktopNotificationSent)
                 }, gateway.client)
@@ -142,7 +148,7 @@ class Service(
     fun viewIncomingNotifications() =
         synchronized(state) {
             doOnlyWhenViewingState { state ->
-                state.gatewayStateSet.flushPool()
+                state.flushPool()
                 onChangeTriggeringViewUpdate()
             }
         }
@@ -151,7 +157,7 @@ class Service(
         gateways.forEach { (gatewayId, gateway) ->
             synchronized(state) {
                 doOnlyWhenViewingState { state ->
-                    val gatewayState = state.gatewayStateSet.getState(gatewayId)
+                    val gatewayState = state.getGatewayState(gatewayId)
                     val (ntfs, nextOffset) = gateway.client.fetchNotificationsWithOffset(gatewayState.timeMachineOffset)
                     gatewayState.apply {
                         addToUnread(ntfs)
