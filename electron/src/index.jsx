@@ -14,8 +14,12 @@ import Typography from "@material-ui/core/Typography";
 import AppBar from "@material-ui/core/AppBar";
 import Button from "@material-ui/core/Button";
 import Toolbar from "@material-ui/core/Toolbar";
+import Menu from "@material-ui/core/Menu";
+import MenuItem from "@material-ui/core/MenuItem";
 import Checkbox from "@material-ui/core/Checkbox";
 import SearchIcon from "@material-ui/icons/Search";
+import SaveAltIcon from "@material-ui/icons/SaveAlt";
+import ArrowDropDownIcon from "@material-ui/icons/ArrowDropDown";
 import Input from "@material-ui/core/Input";
 
 function NotificationCard(props) {
@@ -167,6 +171,8 @@ class Client {
 
 function App({ client, viewModel }) {
   const [keyword, setKeyword] = useState("");
+  const [keywordSelectMenuAnchorEl, setKeywordSelectMenuAnchorEl] =
+    useState(null);
 
   if (viewModel.stateClass === "LoadingState") {
     return <div>Loading...</div>;
@@ -194,6 +200,40 @@ function App({ client, viewModel }) {
                 client.changeFilterKeyword(keyword);
               }}
             />
+            <IconButton>
+              <SaveAltIcon />
+            </IconButton>
+            <IconButton
+              onClick={(event) => setKeywordSelectMenuAnchorEl(event.target)}
+            >
+              <ArrowDropDownIcon />
+            </IconButton>
+            <Menu
+              anchorEl={keywordSelectMenuAnchorEl}
+              open={Boolean(keywordSelectMenuAnchorEl)}
+              onClose={() => setKeywordSelectMenuAnchorEl(null)}
+            >
+              <MenuItem
+                onClick={() => {
+                  const keyword = "Keyword1Hogehoge";
+                  setKeyword(keyword);
+                  client.changeFilterKeyword(keyword);
+                  setKeywordSelectMenuAnchorEl(null);
+                }}
+              >
+                Keyword1Hogehoge
+              </MenuItem>
+              <MenuItem
+                onClick={() => {
+                  const keyword = "ピープル";
+                  setKeyword(keyword);
+                  client.changeFilterKeyword(keyword);
+                  setKeywordSelectMenuAnchorEl(null);
+                }}
+              >
+                ピープル
+              </MenuItem>
+            </Menu>
             <IncomingNotificationsButton
               count={viewModel.stateData.incomingNotificationCount}
               onClick={() => client.viewIncomingNotifications()}
