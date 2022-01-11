@@ -1,12 +1,13 @@
 package main
 
-import java.time.OffsetDateTime
+import java.time.LocalDateTime
+import java.time.ZoneId
 
 data class ViewModel(val stateClass: String, val stateData: Any?) {
     data class ViewingData(val isMentionOnly: Boolean, val notifications: List<Notification>, val incomingNotificationCount: Int)
 
     data class Notification(
-        val timestamp: OffsetDateTime,
+        val timestamp: LocalDateTime,
         val source: Source,
         val title: String,
         val message: String,
@@ -23,7 +24,7 @@ data class ViewModel(val stateClass: String, val stateData: Any?) {
         companion object {
             fun from(gatewayId: GatewayId, n: main.Notification): Notification {
                 return Notification(
-                    n.timestamp,
+                    n.timestamp.atZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime(),
                     Source(
                         n.source.name,
                         n.source.url,
