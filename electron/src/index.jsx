@@ -203,37 +203,35 @@ function App({ client, viewModel }) {
             <IconButton>
               <SaveAltIcon />
             </IconButton>
-            <IconButton
-              onClick={(event) => setKeywordSelectMenuAnchorEl(event.target)}
-            >
-              <ArrowDropDownIcon />
-            </IconButton>
-            <Menu
-              anchorEl={keywordSelectMenuAnchorEl}
-              open={Boolean(keywordSelectMenuAnchorEl)}
-              onClose={() => setKeywordSelectMenuAnchorEl(null)}
-            >
-              <MenuItem
-                onClick={() => {
-                  const keyword = "Keyword1Hogehoge";
-                  setKeyword(keyword);
-                  client.changeFilterKeyword(keyword);
-                  setKeywordSelectMenuAnchorEl(null);
-                }}
-              >
-                Keyword1Hogehoge
-              </MenuItem>
-              <MenuItem
-                onClick={() => {
-                  const keyword = "ピープル";
-                  setKeyword(keyword);
-                  client.changeFilterKeyword(keyword);
-                  setKeywordSelectMenuAnchorEl(null);
-                }}
-              >
-                ピープル
-              </MenuItem>
-            </Menu>
+            {viewModel.stateData.savedKeywords.length > 0 && (
+              <>
+                <IconButton
+                  onClick={(event) =>
+                    setKeywordSelectMenuAnchorEl(event.target)
+                  }
+                >
+                  <ArrowDropDownIcon />
+                </IconButton>
+                <Menu
+                  anchorEl={keywordSelectMenuAnchorEl}
+                  open={Boolean(keywordSelectMenuAnchorEl)}
+                  onClose={() => setKeywordSelectMenuAnchorEl(null)}
+                >
+                  {viewModel.stateData.savedKeywords.map((k) => {
+                    return <MenuItem
+                      key={k}
+                      onClick={() => {
+                        setKeyword(k);
+                        client.changeFilterKeyword(k);
+                        setKeywordSelectMenuAnchorEl(null);
+                      }}
+                    >
+                      {k}
+                    </MenuItem>;
+                  })}
+                </Menu>
+              </>
+            )}
             <IncomingNotificationsButton
               count={viewModel.stateData.incomingNotificationCount}
               onClick={() => client.viewIncomingNotifications()}

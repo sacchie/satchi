@@ -55,6 +55,7 @@ class Service(
                 ViewModel.ViewingData(
                     viewingState.filterState.isMentionOnly,
                     ntfs,
+                    viewingState.filterState.savedKeywords,
                     viewingState.gatewayStateSet.getPoolCount()
                 )
             }
@@ -77,7 +78,7 @@ class Service(
                 }.toMap()
             )
 
-            state = ViewingState(gatewayStateSet, main.filter.State(false, ""))
+            state = ViewingState(gatewayStateSet, main.filter.State(false, "", listOf("Keyword1Hogehoge", "ピープル")))
         }
         onChangeTriggeringViewUpdate()
     }
