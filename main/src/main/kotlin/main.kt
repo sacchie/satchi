@@ -11,7 +11,7 @@ const val MAIN_URL = "http://localhost:8037"
 
 data class InMessage(val op: OpType, val args: Map<String, Object>?) {
     enum class OpType {
-        Notifications, MarkAsRead, ToggleMentioned, ChangeFilterKeyword,
+        Notifications, MarkAsRead, ToggleMentioned, ChangeFilterKeyword, SaveFilterKeyword,
         ViewIncomingNotifications
     }
 }
@@ -78,7 +78,7 @@ class Service(
                 }.toMap()
             )
 
-            state = ViewingState(gatewayStateSet, main.filter.State(false, "", listOf("Keyword1Hogehoge", "ピープル")))
+            state = ViewingState(gatewayStateSet, main.filter.State(false, "", listOf()))
         }
         onChangeTriggeringViewUpdate()
     }
@@ -122,6 +122,19 @@ class Service(
                 keyword.trim().let { newTrimmedKeyword ->
                     if (newTrimmedKeyword != state.filterState.keyword) {
                         state.filterState.keyword = newTrimmedKeyword
+                        onChangeTriggeringViewUpdate()
+                    }
+                }
+            }
+        }
+    }
+
+    fun saveFilterKeyword(keyword: String) {
+        synchronized(state) {
+            doOnlyWhenViewingState { state ->
+                keyword.trim().let { trimmedKeyword ->
+                    if (trimmedKeyword.isNotEmpty() && trimmedKeyword !in state.filterState.savedKeywords) {
+                        state.filterState.savedKeywords = state.filterState.savedKeywords + trimmedKeyword
                         onChangeTriggeringViewUpdate()
                     }
                 }
@@ -217,6 +230,7 @@ fun main() {
                     InMessage.OpType.ToggleMentioned ->
                         service.toggleMentioned()
                     InMessage.OpType.ChangeFilterKeyword -> service.changeFilterKeyword(msg.args!!["keyword"].toString())
+                    InMessage.OpType.SaveFilterKeyword -> service.saveFilterKeyword(msg.args!!["keyword"].toString())
                     InMessage.OpType.ViewIncomingNotifications -> service.viewIncomingNotifications()
                 }
             }

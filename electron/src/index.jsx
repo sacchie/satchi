@@ -160,6 +160,15 @@ class Client {
     );
   }
 
+  saveFilterKeyword(keyword) {
+    this.ws.send(
+      JSON.stringify({
+        op: "SaveFilterKeyword",
+        args: { keyword },
+      })
+    );
+  }
+
   viewIncomingNotifications() {
     this.ws.send(
       JSON.stringify({
@@ -200,7 +209,11 @@ function App({ client, viewModel }) {
                 client.changeFilterKeyword(keyword);
               }}
             />
-            <IconButton>
+            <IconButton
+              onClick={() => {
+                client.saveFilterKeyword(keyword);
+              }}
+            >
               <SaveAltIcon />
             </IconButton>
             {viewModel.stateData.savedKeywords.length > 0 && (
@@ -218,16 +231,18 @@ function App({ client, viewModel }) {
                   onClose={() => setKeywordSelectMenuAnchorEl(null)}
                 >
                   {viewModel.stateData.savedKeywords.map((k) => {
-                    return <MenuItem
-                      key={k}
-                      onClick={() => {
-                        setKeyword(k);
-                        client.changeFilterKeyword(k);
-                        setKeywordSelectMenuAnchorEl(null);
-                      }}
-                    >
-                      {k}
-                    </MenuItem>;
+                    return (
+                      <MenuItem
+                        key={k}
+                        onClick={() => {
+                          setKeyword(k);
+                          client.changeFilterKeyword(k);
+                          setKeywordSelectMenuAnchorEl(null);
+                        }}
+                      >
+                        {k}
+                      </MenuItem>
+                    );
                   })}
                 </Menu>
               </>
