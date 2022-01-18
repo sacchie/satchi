@@ -5,9 +5,12 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import io.javalin.Javalin
 import io.javalin.websocket.WsContext
+import java.io.FileInputStream
+import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.nio.charset.Charset
 import java.util.*
+import kotlin.streams.toList
 
 const val MAIN_URL = "http://localhost:8037"
 
@@ -29,12 +32,37 @@ class NullState : State
 class LoadingState : State
 data class ViewingState(val gatewayStateSet: GatewayStateSet, val filterState: main.filter.State) : State
 
+class FilterKeywordStore {
+    fun load(): List<String> {
+        return try {
+            FileInputStream(KEYWORD_FILE_NAME).bufferedReader(CHARSET).lines().toList()
+        } catch (e: FileNotFoundException) {
+            listOf()
+        }
+    }
+
+    fun append(keyword: String) {
+        FileOutputStream(KEYWORD_FILE_NAME, true).bufferedWriter(CHARSET).use {
+            it.appendLine(keyword)
+        }
+    }
+
+    companion object {
+        // TODO: This will not work on Windows
+        private val KEYWORD_FILE_NAME = System.getProperty("user.home") + "/.keywords.txt"
+
+        private val CHARSET = Charset.forName("UTF-8")
+    }
+}
+
 class Service(
     private val gateways: Gateways,
     private val sendUpdateView: (viewModel: ViewModel) -> Unit,
     private val sendShowDesktopNotification: (notifications: List<Notification>) -> Unit
 ) {
     private var state: State = NullState()
+
+    private val filterKeywordStore = FilterKeywordStore()
 
     private val desktopNotificationService = object : main.desktopnotification.Service {
         override fun send(notifications: List<Notification>) = sendShowDesktopNotification(notifications)
@@ -57,7 +85,7 @@ class Service(
                 ViewModel.ViewingData(
                     viewingState.filterState.isMentionOnly,
                     ntfs,
-                    viewingState.filterState.savedKeywords,
+                    filterKeywordStore.load(),
                     viewingState.gatewayStateSet.getPoolCount()
                 )
             }
@@ -80,7 +108,7 @@ class Service(
                 }.toMap()
             )
 
-            state = ViewingState(gatewayStateSet, main.filter.State(false, "", listOf()))
+            state = ViewingState(gatewayStateSet, main.filter.State(false, ""))
         }
         onChangeTriggeringViewUpdate()
     }
@@ -132,15 +160,11 @@ class Service(
     }
 
     fun saveFilterKeyword(keyword: String) {
-        val keywordFileName = System.getProperty("user.home") + "/.keywords.txt"
         synchronized(state) {
             doOnlyWhenViewingState { state ->
                 keyword.trim().let { trimmedKeyword ->
-                    if (trimmedKeyword.isNotEmpty() && trimmedKeyword !in state.filterState.savedKeywords) {
-                        state.filterState.savedKeywords = state.filterState.savedKeywords + trimmedKeyword
-                        FileOutputStream(keywordFileName, true).bufferedWriter(Charset.forName("UTF-8")).use {
-                            it.appendLine(trimmedKeyword)
-                        }
+                    if (trimmedKeyword.isNotEmpty() && trimmedKeyword !in filterKeywordStore.load()) {
+                        filterKeywordStore.append(trimmedKeyword)
                         onChangeTriggeringViewUpdate()
                     }
                 }
