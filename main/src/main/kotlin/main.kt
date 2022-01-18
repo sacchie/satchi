@@ -5,6 +5,8 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import io.javalin.Javalin
 import io.javalin.websocket.WsContext
+import java.io.FileOutputStream
+import java.nio.charset.Charset
 import java.util.*
 
 const val MAIN_URL = "http://localhost:8037"
@@ -130,11 +132,15 @@ class Service(
     }
 
     fun saveFilterKeyword(keyword: String) {
+        val keywordFileName = System.getProperty("user.home") + "/.keywords.txt"
         synchronized(state) {
             doOnlyWhenViewingState { state ->
                 keyword.trim().let { trimmedKeyword ->
                     if (trimmedKeyword.isNotEmpty() && trimmedKeyword !in state.filterState.savedKeywords) {
                         state.filterState.savedKeywords = state.filterState.savedKeywords + trimmedKeyword
+                        FileOutputStream(keywordFileName, true).bufferedWriter(Charset.forName("UTF-8")).use {
+                            it.appendLine(trimmedKeyword)
+                        }
                         onChangeTriggeringViewUpdate()
                     }
                 }
