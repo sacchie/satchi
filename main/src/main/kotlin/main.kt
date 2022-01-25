@@ -33,8 +33,13 @@ class NullState : State
 class LoadingState : State
 data class ViewingState(val gatewayStateSet: GatewayStateSet, val filterState: main.filter.State) : State
 
-class FilterKeywordStore {
-    fun load(): List<String> {
+interface FilterKeywordStore {
+    fun load(): List<String>
+    fun append(keyword: String)
+}
+
+class LocalFileSystemFilterKeywordStore : FilterKeywordStore {
+    override fun load(): List<String> {
         return try {
             FileInputStream(KEYWORD_FILE_NAME).bufferedReader(CHARSET).lines().toList()
         } catch (e: FileNotFoundException) {
@@ -42,7 +47,7 @@ class FilterKeywordStore {
         }
     }
 
-    fun append(keyword: String) {
+    override fun append(keyword: String) {
         FileOutputStream(KEYWORD_FILE_NAME, true).bufferedWriter(CHARSET).use {
             it.appendLine(keyword)
         }
@@ -57,12 +62,11 @@ class FilterKeywordStore {
 
 class Service(
     private val gateways: Gateways,
+    private val filterKeywordStore: FilterKeywordStore,
     private val sendUpdateView: (viewModel: ViewModel) -> Unit,
     private val sendShowDesktopNotification: (notifications: List<Notification>) -> Unit
 ) {
     private var state: State = NullState()
-
-    private val filterKeywordStore = FilterKeywordStore()
 
     private val desktopNotificationService = object : main.desktopnotification.Service {
         override fun send(notifications: List<Notification>) = sendShowDesktopNotification(notifications)
@@ -219,6 +223,7 @@ fun main() {
 
     val service = Service(
         gateways,
+        LocalFileSystemFilterKeywordStore(),
         sendUpdateView = { viewModel ->
             val outMessage = OutMessage(OutMessage.Type.UpdateView, viewModel)
             webSocketContexts.forEach { ctx ->

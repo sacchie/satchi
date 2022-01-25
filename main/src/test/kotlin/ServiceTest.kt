@@ -1,8 +1,4 @@
-import main.Client
-import main.GatewayFactory
-import main.Notification
-import main.Service
-import main.ViewModel
+import main.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import strikt.api.expectThat
@@ -26,6 +22,10 @@ internal class ServiceTest {
         mockClient = MockClient()
         sut = Service(
             mapOf("0" to GatewayFactory.UNMANAGED.create(mockClient)),
+            object : FilterKeywordStore {
+                override fun load() = listOf<String>()
+                override fun append(keyword: String) {}
+            },
             sendUpdateView = sentViewModels::add,
             sendShowDesktopNotification = sentDesktopNotifications::addAll
         )
