@@ -5,13 +5,19 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import io.javalin.Javalin
 import io.javalin.websocket.WsContext
+import java.io.FileInputStream
+import java.io.FileNotFoundException
+import java.io.FileOutputStream
+import java.nio.charset.Charset
+import java.nio.file.Paths
 import java.util.*
+import kotlin.streams.toList
 
 const val MAIN_URL = "http://localhost:8037"
 
 data class InMessage(val op: OpType, val args: Map<String, Object>?) {
     enum class OpType {
-        Notifications, MarkAsRead, ToggleMentioned, ChangeFilterKeyword,
+        Notifications, MarkAsRead, ToggleMentioned, ChangeFilterKeyword, SaveFilterKeyword,
         ViewIncomingNotifications
     }
 }
@@ -27,8 +33,36 @@ class NullState : State
 class LoadingState : State
 data class ViewingState(val gatewayStateSet: GatewayStateSet, val filterState: main.filter.State) : State
 
+interface FilterKeywordStore {
+    fun load(): List<String>
+    fun append(keyword: String)
+}
+
+class LocalFileSystemFilterKeywordStore : FilterKeywordStore {
+    override fun load(): List<String> {
+        return try {
+            FileInputStream(KEYWORD_FILE_NAME).bufferedReader(CHARSET).lines().toList()
+        } catch (e: FileNotFoundException) {
+            listOf()
+        }
+    }
+
+    override fun append(keyword: String) {
+        FileOutputStream(KEYWORD_FILE_NAME, true).bufferedWriter(CHARSET).use {
+            it.appendLine(keyword)
+        }
+    }
+
+    companion object {
+        private val KEYWORD_FILE_NAME = Paths.get(System.getProperty("user.home"), ".keywords.txt").toString()
+
+        private val CHARSET = Charset.forName("UTF-8")
+    }
+}
+
 class Service(
     private val gateways: Gateways,
+    private val filterKeywordStore: FilterKeywordStore,
     private val sendUpdateView: (viewModel: ViewModel) -> Unit,
     private val sendShowDesktopNotification: (notifications: List<Notification>) -> Unit
 ) {
@@ -55,6 +89,7 @@ class Service(
                 ViewModel.ViewingData(
                     viewingState.filterState.isMentionOnly,
                     ntfs,
+                    filterKeywordStore.load(),
                     viewingState.gatewayStateSet.getPoolCount()
                 )
             }
@@ -128,6 +163,19 @@ class Service(
         }
     }
 
+    fun saveFilterKeyword(keyword: String) {
+        synchronized(state) {
+            doOnlyWhenViewingState { state ->
+                keyword.trim().let { trimmedKeyword ->
+                    if (trimmedKeyword.isNotEmpty() && trimmedKeyword !in filterKeywordStore.load()) {
+                        filterKeywordStore.append(trimmedKeyword)
+                        onChangeTriggeringViewUpdate()
+                    }
+                }
+            }
+        }
+    }
+
     fun sendLatestMentioned() = gateways.forEach { (gatewayId, gateway) ->
         synchronized(state) {
             doOnlyWhenViewingState { state ->
@@ -175,6 +223,7 @@ fun main() {
 
     val service = Service(
         gateways,
+        LocalFileSystemFilterKeywordStore(),
         sendUpdateView = { viewModel ->
             val outMessage = OutMessage(OutMessage.Type.UpdateView, viewModel)
             webSocketContexts.forEach { ctx ->
@@ -216,6 +265,7 @@ fun main() {
                     InMessage.OpType.ToggleMentioned ->
                         service.toggleMentioned()
                     InMessage.OpType.ChangeFilterKeyword -> service.changeFilterKeyword(msg.args!!["keyword"].toString())
+                    InMessage.OpType.SaveFilterKeyword -> service.saveFilterKeyword(msg.args!!["keyword"].toString())
                     InMessage.OpType.ViewIncomingNotifications -> service.viewIncomingNotifications()
                 }
             }
