@@ -182,127 +182,128 @@ class Service(
                 val gatewayState = state.gatewayStateSet.getState(gatewayId)
                 desktopNotificationService.run({ update ->
                     gatewayState.idsDesktopNotificationSent = update(gatewayState.idsDesktopNotificationSent)
-                }, gateway.client)
-            }
-        }
-    }
-
-    fun viewIncomingNotifications() =
-        synchronized(state) {
-            doOnlyWhenViewingState { state ->
-                state.gatewayStateSet.flushPool()
-                onChangeTriggeringViewUpdate()
+                }, gateway.client, filterKeywordStore.load())
+                }
             }
         }
 
-    fun fetchBack() =
-        gateways.forEach { (gatewayId, gateway) ->
+        fun viewIncomingNotifications() =
             synchronized(state) {
                 doOnlyWhenViewingState { state ->
-                    val gatewayState = state.gatewayStateSet.getState(gatewayId)
-                    val (ntfs, nextOffset) = gateway.client.fetchNotificationsWithOffset(gatewayState.timeMachineOffset)
-                    gatewayState.apply {
-                        addToUnread(ntfs)
-                        timeMachineOffset = nextOffset
-                        System.err.println("fetchBack(): #unreads=${getUnread().size}, gatewayId=$gatewayId")
-                    }
+                    state.gatewayStateSet.flushPool()
                     onChangeTriggeringViewUpdate()
                 }
             }
-        }
-}
 
-fun main() {
-    val gateways = loadGateways("gateways.yml")
-
-    val mapper = jacksonObjectMapper() // APIレスポンスで使いまわしている
-    mapper.registerModule(JavaTimeModule()) // timezoneを明示的に指定したほうがよさそう
-    mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-
-    val webSocketContexts = Collections.synchronizedList(mutableListOf<WsContext>())
-
-    val service = Service(
-        gateways,
-        LocalFileSystemFilterKeywordStore(),
-        sendUpdateView = { viewModel ->
-            val outMessage = OutMessage(OutMessage.Type.UpdateView, viewModel)
-            webSocketContexts.forEach { ctx ->
-                ctx.send(mapper.writeValueAsString(outMessage))
-            }
-        },
-        sendShowDesktopNotification = { notifications ->
-            notifications.forEach { notification ->
-                webSocketContexts.forEach { ctx ->
-                    val outMessage = OutMessage(
-                        OutMessage.Type.ShowDesktopNotification,
-                        mapOf(
-                            Pair("title", "${notification.source.name}: ${notification.title}"),
-                            Pair("body", notification.message),
-                            Pair("url", notification.source.url),
-                        )
-                    )
-                    ctx.send(mapper.writeValueAsString(outMessage))
-                }
-            }
-        }
-    )
-
-    Javalin.create().apply {
-        ws("/connect") { ws ->
-            ws.onConnect { ctx ->
-                webSocketContexts.add(ctx)
-                System.err.println("/view Opened (# of contexts=${webSocketContexts.size})")
-            }
-            ws.onMessage { ctx ->
-                val msg = mapper.readValue(ctx.message(), InMessage::class.java)
-                when (msg.op) {
-                    InMessage.OpType.Notifications -> service.viewLatest()
-                    InMessage.OpType.MarkAsRead ->
-                        service.markAsRead(
-                            msg.args!!["gatewayId"].toString(),
-                            msg.args["notificationId"].toString(),
-                        )
-                    InMessage.OpType.ToggleMentioned ->
-                        service.toggleMentioned()
-                    InMessage.OpType.ChangeFilterKeyword -> service.changeFilterKeyword(msg.args!!["keyword"].toString())
-                    InMessage.OpType.SaveFilterKeyword -> service.saveFilterKeyword(msg.args!!["keyword"].toString())
-                    InMessage.OpType.ViewIncomingNotifications -> service.viewIncomingNotifications()
-                }
-            }
-            ws.onClose { ctx ->
-                webSocketContexts.remove(ctx)
-                System.err.println("/view Closed (# of contexts=${webSocketContexts.size})")
-            }
-        }
-
-        get("/icon") { ctx ->
-            run {
-                val gatewayId = ctx.queryParam("gatewayId")!!
-                val iconId = ctx.queryParam("iconId")!!
-                gateways[gatewayId]?.let { gw ->
-                    gw.fetchIcon(iconId)?.let {
-                        ctx.result(it)
-                        ctx.header("Cache-Control", "max-age=315360000")
+        fun fetchBack() =
+            gateways.forEach { (gatewayId, gateway) ->
+                synchronized(state) {
+                    doOnlyWhenViewingState { state ->
+                        val gatewayState = state.gatewayStateSet.getState(gatewayId)
+                        val (ntfs, nextOffset) = gateway.client.fetchNotificationsWithOffset(gatewayState.timeMachineOffset)
+                        gatewayState.apply {
+                            addToUnread(ntfs)
+                            timeMachineOffset = nextOffset
+                            System.err.println("fetchBack(): #unreads=${getUnread().size}, gatewayId=$gatewayId")
+                        }
+                        onChangeTriggeringViewUpdate()
                     }
                 }
             }
-        }
-    }.start(8037) /* 37 = "サッチ" */
+    }
 
-    run {
-        var thread: Thread? = null
-        kotlin.concurrent.timer(null, false, 5 * 1000, 10 * 1000) {
-            System.err.println("timer fired")
-            if (thread != null && thread!!.isAlive) {
-                System.err.println("task skipped")
-                return@timer
+    fun main() {
+        val gateways = loadGateways("gateways.yml")
+
+        val mapper = jacksonObjectMapper() // APIレスポンスで使いまわしている
+        mapper.registerModule(JavaTimeModule()) // timezoneを明示的に指定したほうがよさそう
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+
+        val webSocketContexts = Collections.synchronizedList(mutableListOf<WsContext>())
+
+        val service = Service(
+            gateways,
+            LocalFileSystemFilterKeywordStore(),
+            sendUpdateView = { viewModel ->
+                val outMessage = OutMessage(OutMessage.Type.UpdateView, viewModel)
+                webSocketContexts.forEach { ctx ->
+                    ctx.send(mapper.writeValueAsString(outMessage))
+                }
+            },
+            sendShowDesktopNotification = { notifications ->
+                notifications.forEach { notification ->
+                    webSocketContexts.forEach { ctx ->
+                        val outMessage = OutMessage(
+                            OutMessage.Type.ShowDesktopNotification,
+                            mapOf(
+                                Pair("title", "${notification.source.name}: ${notification.title}"),
+                                Pair("body", notification.message),
+                                Pair("url", notification.source.url),
+                            )
+                        )
+                        ctx.send(mapper.writeValueAsString(outMessage))
+                    }
+                }
             }
-            thread = kotlin.concurrent.thread {
-                service.sendLatestMentioned()
-                service.fetchToPool()
-                service.fetchBack()
+        )
+
+        Javalin.create().apply {
+            ws("/connect") { ws ->
+                ws.onConnect { ctx ->
+                    webSocketContexts.add(ctx)
+                    System.err.println("/view Opened (# of contexts=${webSocketContexts.size})")
+                }
+                ws.onMessage { ctx ->
+                    val msg = mapper.readValue(ctx.message(), InMessage::class.java)
+                    when (msg.op) {
+                        InMessage.OpType.Notifications -> service.viewLatest()
+                        InMessage.OpType.MarkAsRead ->
+                            service.markAsRead(
+                                msg.args!!["gatewayId"].toString(),
+                                msg.args["notificationId"].toString(),
+                            )
+                        InMessage.OpType.ToggleMentioned ->
+                            service.toggleMentioned()
+                        InMessage.OpType.ChangeFilterKeyword -> service.changeFilterKeyword(msg.args!!["keyword"].toString())
+                        InMessage.OpType.SaveFilterKeyword -> service.saveFilterKeyword(msg.args!!["keyword"].toString())
+                        InMessage.OpType.ViewIncomingNotifications -> service.viewIncomingNotifications()
+                    }
+                }
+                ws.onClose { ctx ->
+                    webSocketContexts.remove(ctx)
+                    System.err.println("/view Closed (# of contexts=${webSocketContexts.size})")
+                }
             }
-            System.err.println("task executed")
+
+            get("/icon") { ctx ->
+                run {
+                    val gatewayId = ctx.queryParam("gatewayId")!!
+                    val iconId = ctx.queryParam("iconId")!!
+                    gateways[gatewayId]?.let { gw ->
+                        gw.fetchIcon(iconId)?.let {
+                            ctx.result(it)
+                            ctx.header("Cache-Control", "max-age=315360000")
+                        }
+                    }
+                }
+            }
+        }.start(8037) /* 37 = "サッチ" */
+
+        run {
+            var thread: Thread? = null
+            kotlin.concurrent.timer(null, false, 5 * 1000, 10 * 1000) {
+                System.err.println("timer fired")
+                if (thread != null && thread!!.isAlive) {
+                    System.err.println("task skipped")
+                    return@timer
+                }
+                thread = kotlin.concurrent.thread {
+                    service.sendLatestMentioned()
+                    service.fetchToPool()
+                    service.fetchBack()
+                }
+                System.err.println("task executed")
+            }
         }
     }
-}
+    

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
+import main.keywordmatch.matchKeyword
 import java.io.InputStream
 import java.net.URL
 import java.net.URLClassLoader
@@ -69,9 +70,9 @@ data class GatewayStateSet(private val map: Map<GatewayId, GatewayState>) {
     fun getState(id: GatewayId) = map[id]!!
 
     fun getUnread(filterState: main.filter.State, limit: Int) =
-        map.flatMap {
-            val gatewayId = it.key
-            it.value.getUnread()
+        map.flatMap { entry ->
+            val gatewayId = entry.key
+            entry.value.getUnread()
                 .filter { if (filterState.isMentionOnly) it.mentioned else true }
                 .filter {
                     if (filterState.keyword.isBlank()) true else matchKeyword(
@@ -89,9 +90,6 @@ data class GatewayStateSet(private val map: Map<GatewayId, GatewayState>) {
     fun flushPool() {
         map.values.forEach(GatewayState::flushPool)
     }
-
-    private fun matchKeyword(ntf: Notification, keyword: String) =
-        ntf.message.contains(keyword) || ntf.title.contains(keyword) || ntf.source.name.contains(keyword)
 }
 
 class GatewayState(isManaged: Boolean, initialNtfs: List<Notification>) {
