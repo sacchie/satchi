@@ -225,26 +225,16 @@ function App({ client, viewModel }) {
                 >
                   <ArrowDropDownIcon />
                 </IconButton>
-                <Menu
+                <SavedKeywordMenu
                   anchorEl={keywordSelectMenuAnchorEl}
-                  open={Boolean(keywordSelectMenuAnchorEl)}
                   onClose={() => setKeywordSelectMenuAnchorEl(null)}
-                >
-                  {viewModel.stateData.savedKeywords.map((k) => {
-                    return (
-                      <MenuItem
-                        key={k}
-                        onClick={() => {
-                          setKeyword(k);
-                          client.changeFilterKeyword(k);
-                          setKeywordSelectMenuAnchorEl(null);
-                        }}
-                      >
-                        {k}
-                      </MenuItem>
-                    );
-                  })}
-                </Menu>
+                  keywords={viewModel.stateData.savedKeywords}
+                  onSelect={(k) => {
+                    setKeyword(k);
+                    client.changeFilterKeyword(k);
+                    setKeywordSelectMenuAnchorEl(null);
+                  }}
+                />
               </>
             )}
             <IncomingNotificationsButton
@@ -292,6 +282,32 @@ function SearchBox({ value, onChange }) {
         onChange={(event) => onChange(event.target.value)}
       />
     </>
+  );
+}
+
+function SavedKeywordMenu({ anchorEl, onClose, keywords, onSelect }) {
+  return (
+    <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={onClose}>
+      {keywords.map((k) => {
+        return (
+          <MenuItem
+            key={k}
+            onClick={() => {
+              onSelect(k);
+            }}
+          >
+            <Checkbox
+              // checked={checked}
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
+              // onChange={(e) => {  }}
+            />
+            <Typography>{k}</Typography>
+          </MenuItem>
+        );
+      })}
+    </Menu>
   );
 }
 
