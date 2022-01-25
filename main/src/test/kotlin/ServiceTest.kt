@@ -2,29 +2,29 @@ import main.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import strikt.api.expectThat
-import strikt.assertions.containsExactly
-import strikt.assertions.isA
-import strikt.assertions.isEqualTo
-import strikt.assertions.isTrue
+import strikt.assertions.*
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 
 internal class ServiceTest {
     private lateinit var sut: Service
     private lateinit var mockClient: MockClient
+    private lateinit var savedKeywords: MutableList<String>
     private lateinit var sentViewModels: MutableList<ViewModel>
     private lateinit var sentDesktopNotifications: MutableList<Notification>
 
     @BeforeEach
     fun setup() {
+        savedKeywords = mutableListOf()
         sentViewModels = mutableListOf()
         sentDesktopNotifications = mutableListOf()
         mockClient = MockClient()
+
         sut = Service(
             mapOf("0" to GatewayFactory.UNMANAGED.create(mockClient)),
             object : FilterKeywordStore {
-                override fun load() = listOf<String>()
-                override fun append(keyword: String) {}
+                override fun load() = savedKeywords.toList()
+                override fun append(keyword: String) { savedKeywords.add(keyword) }
             },
             sendUpdateView = sentViewModels::add,
             sendShowDesktopNotification = sentDesktopNotifications::addAll
@@ -286,6 +286,27 @@ internal class ServiceTest {
 
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
             expectThat(it.notifications.size).isEqualTo(1)
+        }
+    }
+
+    @Test
+    fun `User can save keywords`() {
+        sut.viewLatest()
+        expectThat(savedKeywords).isEmpty()
+
+        sut.saveFilterKeyword("ほげ")
+        expectThat(savedKeywords).containsExactly("ほげ")
+
+        sut.saveFilterKeyword("ふが")
+        expectThat(savedKeywords).containsExactly("ほげ", "ふが")
+    }
+
+    @Test
+    fun `User can use saved keywords to filter notifications`() {
+        savedKeywords.addAll(listOf("ほげ", "ふが"))
+        sut.viewLatest()
+        (sentViewModels.last().stateData as ViewModel.ViewingData).let {
+            expectThat(it.savedKeywords).containsExactly("ほげ", "ふが")
         }
     }
 }
