@@ -9,6 +9,7 @@ import java.io.FileInputStream
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.nio.charset.Charset
+import java.nio.file.Paths
 import java.util.*
 import kotlin.streams.toList
 
@@ -48,8 +49,7 @@ class FilterKeywordStore {
     }
 
     companion object {
-        // TODO: This will not work on Windows
-        private val KEYWORD_FILE_NAME = System.getProperty("user.home") + "/.keywords.txt"
+        private val KEYWORD_FILE_NAME = Paths.get(System.getProperty("user.home"), ".keywords.txt").toString()
 
         private val CHARSET = Charset.forName("UTF-8")
     }
