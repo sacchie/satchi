@@ -41,7 +41,9 @@ interface FilterKeywordStore {
 class LocalFileSystemFilterKeywordStore : FilterKeywordStore {
     override fun load(): List<String> {
         return try {
-            FileInputStream(KEYWORD_FILE_NAME).bufferedReader(CHARSET).lines().toList()
+            FileInputStream(KEYWORD_FILE_NAME).bufferedReader(CHARSET).use {
+                it.lines().toList()
+            }
         } catch (e: FileNotFoundException) {
             listOf()
         }
