@@ -24,7 +24,7 @@ internal class ServiceTest {
             mapOf("0" to GatewayFactory.UNMANAGED.create(mockClient)),
             object : FilterKeywordStore {
                 override fun load() = savedKeywords.toList()
-                override fun append(keyword: String) { savedKeywords.add(keyword) }
+                override fun appendIfNotExists(keyword: String) { savedKeywords.add(keyword) }
             },
             sendUpdateView = sentViewModels::add,
             sendShowDesktopNotification = sentDesktopNotifications::addAll

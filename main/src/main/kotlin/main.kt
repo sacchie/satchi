@@ -1,8 +1,11 @@
 package main
 
+import com.fasterxml.jackson.core.type.TypeReference
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import io.javalin.Javalin
 import io.javalin.websocket.WsContext
 import java.io.FileInputStream
@@ -11,13 +14,12 @@ import java.io.FileOutputStream
 import java.nio.charset.Charset
 import java.nio.file.Paths
 import java.util.*
-import kotlin.streams.toList
 
 const val MAIN_URL = "http://localhost:8037"
 
 data class InMessage(val op: OpType, val args: Map<String, Object>?) {
     enum class OpType {
-        Notifications, MarkAsRead, ToggleMentioned, ChangeFilterKeyword, SaveFilterKeyword,
+        Notifications, MarkAsRead, ToggleMentioned, ChangeFilterKeyword, SaveFilterKeyword, ChangeKeywordSelectionForDesktopNotification,
         ViewIncomingNotifications
     }
 }
@@ -34,24 +36,61 @@ class LoadingState : State
 data class ViewingState(val gatewayStateSet: GatewayStateSet, val filterState: main.filter.State) : State
 
 interface FilterKeywordStore {
-    fun load(): List<String>
-    fun append(keyword: String)
+    fun load(): List<Entry>
+    fun appendIfNotExists(keyword: String)
+    fun selectForDesktopNotification(keyword: String, selected: Boolean)
+
+    interface Entry {
+        fun keyword(): String
+        fun selectedForDesktopNotification(): Boolean
+    }
 }
 
 class LocalFileSystemFilterKeywordStore : FilterKeywordStore {
-    override fun load(): List<String> {
-        return try {
-            FileInputStream(KEYWORD_FILE_NAME).bufferedReader(CHARSET).use {
-                it.lines().toList()
+    data class EntryImpl(val keyword: String, var selectedForDesktopNotification: Boolean) : FilterKeywordStore.Entry {
+        override fun keyword(): String = keyword
+        override fun selectedForDesktopNotification() = selectedForDesktopNotification
+    }
+
+    private val mapper = ObjectMapper()
+
+    init {
+        mapper.registerKotlinModule()
+    }
+
+    override fun load(): List<EntryImpl> {
+        synchronized(this) {
+            val responseTypeRef = object : TypeReference<List<EntryImpl>>() {}
+            return try {
+                FileInputStream(KEYWORD_FILE_NAME).bufferedReader(CHARSET).use {
+                    mapper.readValue(it, responseTypeRef)
+                }
+            } catch (e: FileNotFoundException) {
+                listOf()
             }
-        } catch (e: FileNotFoundException) {
-            listOf()
         }
     }
 
-    override fun append(keyword: String) {
-        FileOutputStream(KEYWORD_FILE_NAME, true).bufferedWriter(CHARSET).use {
-            it.appendLine(keyword)
+    override fun appendIfNotExists(keyword: String) {
+        synchronized(this) {
+            val existingEntries = load()
+            if (keyword !in existingEntries.map { it.keyword }) {
+                save(existingEntries + EntryImpl(keyword, false))
+            }
+        }
+    }
+
+    override fun selectForDesktopNotification(keyword: String, selected: Boolean) {
+        synchronized(this) {
+            val entries = load()
+            entries.find { it.keyword == keyword }?.let { it.selectedForDesktopNotification = selected }
+            save(entries)
+        }
+    }
+
+    private fun save(entries: List<EntryImpl>) {
+        FileOutputStream(KEYWORD_FILE_NAME).bufferedWriter(CHARSET).use {
+            it.write(mapper.writeValueAsString(entries))
         }
     }
 
@@ -166,146 +205,155 @@ class Service(
     }
 
     fun saveFilterKeyword(keyword: String) {
-        synchronized(state) {
-            doOnlyWhenViewingState { state ->
-                keyword.trim().let { trimmedKeyword ->
-                    if (trimmedKeyword.isNotEmpty() && trimmedKeyword !in filterKeywordStore.load()) {
-                        filterKeywordStore.append(trimmedKeyword)
-                        onChangeTriggeringViewUpdate()
-                    }
+        keyword.trim().let { trimmedKeyword ->
+            if (trimmedKeyword.isNotEmpty()) {
+                filterKeywordStore.appendIfNotExists(trimmedKeyword)
+                onChangeTriggeringViewUpdate()
+            }
+        }
+    }
+
+    fun selectKeywordForDesktopNotification(keyword: String, selected: Boolean) {
+        filterKeywordStore.selectForDesktopNotification(keyword, selected)
+    }
+
+    fun sendLatestMentioned() {
+        val keywords = filterKeywordStore.load().filter { it.selectedForDesktopNotification() }.map { it.keyword() }
+        gateways.forEach { (gatewayId, gateway) ->
+            synchronized(state) {
+                doOnlyWhenViewingState { state ->
+                    val gatewayState = state.gatewayStateSet.getState(gatewayId)
+                    desktopNotificationService.run(
+                        { update ->
+                            gatewayState.idsDesktopNotificationSent = update(gatewayState.idsDesktopNotificationSent)
+                        },
+                        gateway.client, keywords
+                    )
                 }
             }
         }
     }
 
-    fun sendLatestMentioned() = gateways.forEach { (gatewayId, gateway) ->
+    fun viewIncomingNotifications() =
         synchronized(state) {
             doOnlyWhenViewingState { state ->
-                val gatewayState = state.gatewayStateSet.getState(gatewayId)
-                desktopNotificationService.run({ update ->
-                    gatewayState.idsDesktopNotificationSent = update(gatewayState.idsDesktopNotificationSent)
-                }, gateway.client, filterKeywordStore.load())
-                }
+                state.gatewayStateSet.flushPool()
+                onChangeTriggeringViewUpdate()
             }
         }
 
-        fun viewIncomingNotifications() =
+    fun fetchBack() =
+        gateways.forEach { (gatewayId, gateway) ->
             synchronized(state) {
                 doOnlyWhenViewingState { state ->
-                    state.gatewayStateSet.flushPool()
+                    val gatewayState = state.gatewayStateSet.getState(gatewayId)
+                    val (ntfs, nextOffset) = gateway.client.fetchNotificationsWithOffset(gatewayState.timeMachineOffset)
+                    gatewayState.apply {
+                        addToUnread(ntfs)
+                        timeMachineOffset = nextOffset
+                        System.err.println("fetchBack(): #unreads=${getUnread().size}, gatewayId=$gatewayId")
+                    }
                     onChangeTriggeringViewUpdate()
                 }
             }
+        }
+}
 
-        fun fetchBack() =
-            gateways.forEach { (gatewayId, gateway) ->
-                synchronized(state) {
-                    doOnlyWhenViewingState { state ->
-                        val gatewayState = state.gatewayStateSet.getState(gatewayId)
-                        val (ntfs, nextOffset) = gateway.client.fetchNotificationsWithOffset(gatewayState.timeMachineOffset)
-                        gatewayState.apply {
-                            addToUnread(ntfs)
-                            timeMachineOffset = nextOffset
-                            System.err.println("fetchBack(): #unreads=${getUnread().size}, gatewayId=$gatewayId")
-                        }
-                        onChangeTriggeringViewUpdate()
-                    }
-                }
+fun main() {
+    val gateways = loadGateways("gateways.yml")
+
+    val mapper = jacksonObjectMapper() // APIレスポンスで使いまわしている
+    mapper.registerModule(JavaTimeModule()) // timezoneを明示的に指定したほうがよさそう
+    mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+
+    val webSocketContexts = Collections.synchronizedList(mutableListOf<WsContext>())
+
+    val service = Service(
+        gateways,
+        LocalFileSystemFilterKeywordStore(),
+        sendUpdateView = { viewModel ->
+            val outMessage = OutMessage(OutMessage.Type.UpdateView, viewModel)
+            webSocketContexts.forEach { ctx ->
+                ctx.send(mapper.writeValueAsString(outMessage))
             }
-    }
-
-    fun main() {
-        val gateways = loadGateways("gateways.yml")
-
-        val mapper = jacksonObjectMapper() // APIレスポンスで使いまわしている
-        mapper.registerModule(JavaTimeModule()) // timezoneを明示的に指定したほうがよさそう
-        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-
-        val webSocketContexts = Collections.synchronizedList(mutableListOf<WsContext>())
-
-        val service = Service(
-            gateways,
-            LocalFileSystemFilterKeywordStore(),
-            sendUpdateView = { viewModel ->
-                val outMessage = OutMessage(OutMessage.Type.UpdateView, viewModel)
+        },
+        sendShowDesktopNotification = { notifications ->
+            notifications.forEach { notification ->
                 webSocketContexts.forEach { ctx ->
+                    val outMessage = OutMessage(
+                        OutMessage.Type.ShowDesktopNotification,
+                        mapOf(
+                            Pair("title", "${notification.source.name}: ${notification.title}"),
+                            Pair("body", notification.message),
+                            Pair("url", notification.source.url),
+                        )
+                    )
                     ctx.send(mapper.writeValueAsString(outMessage))
                 }
-            },
-            sendShowDesktopNotification = { notifications ->
-                notifications.forEach { notification ->
-                    webSocketContexts.forEach { ctx ->
-                        val outMessage = OutMessage(
-                            OutMessage.Type.ShowDesktopNotification,
-                            mapOf(
-                                Pair("title", "${notification.source.name}: ${notification.title}"),
-                                Pair("body", notification.message),
-                                Pair("url", notification.source.url),
-                            )
-                        )
-                        ctx.send(mapper.writeValueAsString(outMessage))
-                    }
-                }
-            }
-        )
-
-        Javalin.create().apply {
-            ws("/connect") { ws ->
-                ws.onConnect { ctx ->
-                    webSocketContexts.add(ctx)
-                    System.err.println("/view Opened (# of contexts=${webSocketContexts.size})")
-                }
-                ws.onMessage { ctx ->
-                    val msg = mapper.readValue(ctx.message(), InMessage::class.java)
-                    when (msg.op) {
-                        InMessage.OpType.Notifications -> service.viewLatest()
-                        InMessage.OpType.MarkAsRead ->
-                            service.markAsRead(
-                                msg.args!!["gatewayId"].toString(),
-                                msg.args["notificationId"].toString(),
-                            )
-                        InMessage.OpType.ToggleMentioned ->
-                            service.toggleMentioned()
-                        InMessage.OpType.ChangeFilterKeyword -> service.changeFilterKeyword(msg.args!!["keyword"].toString())
-                        InMessage.OpType.SaveFilterKeyword -> service.saveFilterKeyword(msg.args!!["keyword"].toString())
-                        InMessage.OpType.ViewIncomingNotifications -> service.viewIncomingNotifications()
-                    }
-                }
-                ws.onClose { ctx ->
-                    webSocketContexts.remove(ctx)
-                    System.err.println("/view Closed (# of contexts=${webSocketContexts.size})")
-                }
-            }
-
-            get("/icon") { ctx ->
-                run {
-                    val gatewayId = ctx.queryParam("gatewayId")!!
-                    val iconId = ctx.queryParam("iconId")!!
-                    gateways[gatewayId]?.let { gw ->
-                        gw.fetchIcon(iconId)?.let {
-                            ctx.result(it)
-                            ctx.header("Cache-Control", "max-age=315360000")
-                        }
-                    }
-                }
-            }
-        }.start(8037) /* 37 = "サッチ" */
-
-        run {
-            var thread: Thread? = null
-            kotlin.concurrent.timer(null, false, 5 * 1000, 10 * 1000) {
-                System.err.println("timer fired")
-                if (thread != null && thread!!.isAlive) {
-                    System.err.println("task skipped")
-                    return@timer
-                }
-                thread = kotlin.concurrent.thread {
-                    service.sendLatestMentioned()
-                    service.fetchToPool()
-                    service.fetchBack()
-                }
-                System.err.println("task executed")
             }
         }
+    )
+
+    Javalin.create().apply {
+        ws("/connect") { ws ->
+            ws.onConnect { ctx ->
+                webSocketContexts.add(ctx)
+                System.err.println("/view Opened (# of contexts=${webSocketContexts.size})")
+            }
+            ws.onMessage { ctx ->
+                val msg = mapper.readValue(ctx.message(), InMessage::class.java)
+                when (msg.op) {
+                    InMessage.OpType.Notifications -> service.viewLatest()
+                    InMessage.OpType.MarkAsRead ->
+                        service.markAsRead(
+                            msg.args!!["gatewayId"].toString(),
+                            msg.args["notificationId"].toString(),
+                        )
+                    InMessage.OpType.ToggleMentioned ->
+                        service.toggleMentioned()
+                    InMessage.OpType.ChangeFilterKeyword -> service.changeFilterKeyword(msg.args!!["keyword"].toString())
+                    InMessage.OpType.SaveFilterKeyword -> service.saveFilterKeyword(msg.args!!["keyword"].toString())
+                    InMessage.OpType.ChangeKeywordSelectionForDesktopNotification -> service.selectKeywordForDesktopNotification(
+                        msg.args!!["keyword"].toString(),
+                        msg.args["selected"].toString().toBoolean()
+                    )
+                    InMessage.OpType.ViewIncomingNotifications -> service.viewIncomingNotifications()
+                }
+            }
+            ws.onClose { ctx ->
+                webSocketContexts.remove(ctx)
+                System.err.println("/view Closed (# of contexts=${webSocketContexts.size})")
+            }
+        }
+
+        get("/icon") { ctx ->
+            run {
+                val gatewayId = ctx.queryParam("gatewayId")!!
+                val iconId = ctx.queryParam("iconId")!!
+                gateways[gatewayId]?.let { gw ->
+                    gw.fetchIcon(iconId)?.let {
+                        ctx.result(it)
+                        ctx.header("Cache-Control", "max-age=315360000")
+                    }
+                }
+            }
+        }
+    }.start(8037) /* 37 = "サッチ" */
+
+    run {
+        var thread: Thread? = null
+        kotlin.concurrent.timer(null, false, 5 * 1000, 10 * 1000) {
+            System.err.println("timer fired")
+            if (thread != null && thread!!.isAlive) {
+                System.err.println("task skipped")
+                return@timer
+            }
+            thread = kotlin.concurrent.thread {
+                service.sendLatestMentioned()
+                service.fetchToPool()
+                service.fetchBack()
+            }
+            System.err.println("task executed")
+        }
     }
-    
+}

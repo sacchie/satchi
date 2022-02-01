@@ -169,6 +169,15 @@ class Client {
     );
   }
 
+  changeKeywordSelectionForDesktopNotification(keyword, selected) {
+    this.ws.send(
+      JSON.stringify({
+        op: "ChangeKeywordSelectionForDesktopNotification",
+        args: { keyword, selected },
+      })
+    );
+  }
+
   viewIncomingNotifications() {
     this.ws.send(
       JSON.stringify({
@@ -234,6 +243,12 @@ function App({ client, viewModel }) {
                     client.changeFilterKeyword(k);
                     setKeywordSelectMenuAnchorEl(null);
                   }}
+                  onChangeSelectionForDesktopNotification={(k, selected) => {
+                    client.changeKeywordSelectionForDesktopNotification(
+                      k,
+                      selected
+                    );
+                  }}
                 />
               </>
             )}
@@ -285,10 +300,17 @@ function SearchBox({ value, onChange }) {
   );
 }
 
-function SavedKeywordMenu({ anchorEl, onClose, keywords, onSelect }) {
+function SavedKeywordMenu({
+  anchorEl,
+  onClose,
+  keywords,
+  onSelect,
+  onChangeSelectionForDesktopNotification,
+}) {
   return (
     <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={onClose}>
-      {keywords.map((k) => {
+      {keywords.map((entry) => {
+        const k = entry.keyword;
         return (
           <MenuItem
             key={k}
@@ -297,11 +319,11 @@ function SavedKeywordMenu({ anchorEl, onClose, keywords, onSelect }) {
             }}
           >
             <Checkbox
-              // checked={checked}
+              checked={entry.selectedForDesktopNotification}
               onClick={(e) => {
                 e.stopPropagation();
+                onChangeSelectionForDesktopNotification(k, e.target.checked);
               }}
-              // onChange={(e) => {  }}
             />
             <Typography>{k}</Typography>
           </MenuItem>
