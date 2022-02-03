@@ -20,7 +20,7 @@ dependencies {
     implementation("org.slf4j:slf4j-simple:1.7.30")
     implementation("com.rometools:rome:1.16.0")
     implementation("org.junit.jupiter:junit-jupiter:5.7.0")
-    testImplementation("io.strikt:strikt-core:0.32.0")
+    testImplementation("io.strikt:strikt-core:0.34.1")
 }
 
 spotless {
