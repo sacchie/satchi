@@ -215,6 +215,7 @@ class Service(
 
     fun selectKeywordForDesktopNotification(keyword: String, selected: Boolean) {
         filterKeywordStore.selectForDesktopNotification(keyword, selected)
+        onChangeTriggeringViewUpdate()
     }
 
     fun sendLatestMentioned() {
