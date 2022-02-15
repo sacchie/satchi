@@ -169,6 +169,15 @@ class Client {
     );
   }
 
+  changeKeywordSelectionForDesktopNotification(keyword, selected) {
+    this.ws.send(
+      JSON.stringify({
+        op: "ChangeKeywordSelectionForDesktopNotification",
+        args: { keyword, selected },
+      })
+    );
+  }
+
   viewIncomingNotifications() {
     this.ws.send(
       JSON.stringify({
@@ -225,26 +234,22 @@ function App({ client, viewModel }) {
                 >
                   <ArrowDropDownIcon />
                 </IconButton>
-                <Menu
+                <SavedKeywordMenu
                   anchorEl={keywordSelectMenuAnchorEl}
-                  open={Boolean(keywordSelectMenuAnchorEl)}
                   onClose={() => setKeywordSelectMenuAnchorEl(null)}
-                >
-                  {viewModel.stateData.savedKeywords.map((k) => {
-                    return (
-                      <MenuItem
-                        key={k}
-                        onClick={() => {
-                          setKeyword(k);
-                          client.changeFilterKeyword(k);
-                          setKeywordSelectMenuAnchorEl(null);
-                        }}
-                      >
-                        {k}
-                      </MenuItem>
+                  keywords={viewModel.stateData.savedKeywords}
+                  onSelect={(k) => {
+                    setKeyword(k);
+                    client.changeFilterKeyword(k);
+                    setKeywordSelectMenuAnchorEl(null);
+                  }}
+                  onChangeSelectionForDesktopNotification={(k, selected) => {
+                    client.changeKeywordSelectionForDesktopNotification(
+                      k,
+                      selected
                     );
-                  })}
-                </Menu>
+                  }}
+                />
               </>
             )}
             <IncomingNotificationsButton
@@ -292,6 +297,39 @@ function SearchBox({ value, onChange }) {
         onChange={(event) => onChange(event.target.value)}
       />
     </>
+  );
+}
+
+function SavedKeywordMenu({
+  anchorEl,
+  onClose,
+  keywords,
+  onSelect,
+  onChangeSelectionForDesktopNotification,
+}) {
+  return (
+    <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={onClose}>
+      {keywords.map((entry) => {
+        const k = entry.keyword;
+        return (
+          <MenuItem
+            key={k}
+            onClick={() => {
+              onSelect(k);
+            }}
+          >
+            <Checkbox
+              checked={entry.selectedForDesktopNotification}
+              onClick={(e) => {
+                e.stopPropagation();
+                onChangeSelectionForDesktopNotification(k, e.target.checked);
+              }}
+            />
+            <Typography>{k}</Typography>
+          </MenuItem>
+        );
+      })}
+    </Menu>
   );
 }
 

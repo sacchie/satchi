@@ -9,13 +9,18 @@ import java.time.ZoneOffset
 internal class ServiceTest {
     private lateinit var sut: Service
     private lateinit var mockClient: MockClient
-    private lateinit var savedKeywords: MutableList<String>
+    private lateinit var savedKeywordStoreEntries: MutableList<FilterKeywordStore.Entry>
     private lateinit var sentViewModels: MutableList<ViewModel>
     private lateinit var sentDesktopNotifications: MutableList<Notification>
 
+    data class FilterKeywordStoreEntryImpl(private val keyword: String) : FilterKeywordStore.Entry {
+        override fun keyword(): String = keyword
+        override fun selectedForDesktopNotification(): Boolean = false
+    }
+
     @BeforeEach
     fun setup() {
-        savedKeywords = mutableListOf()
+        savedKeywordStoreEntries = mutableListOf()
         sentViewModels = mutableListOf()
         sentDesktopNotifications = mutableListOf()
         mockClient = MockClient()
@@ -23,8 +28,13 @@ internal class ServiceTest {
         sut = Service(
             mapOf("0" to GatewayFactory.UNMANAGED.create(mockClient)),
             object : FilterKeywordStore {
-                override fun load() = savedKeywords.toList()
-                override fun append(keyword: String) { savedKeywords.add(keyword) }
+                override fun load() = savedKeywordStoreEntries.toList()
+                override fun appendIfNotExists(keyword: String) {
+                    savedKeywordStoreEntries.add(FilterKeywordStoreEntryImpl(keyword))
+                }
+                override fun selectForDesktopNotification(keyword: String, selected: Boolean) {
+                    TODO("Not yet implemented")
+                }
             },
             sendUpdateView = sentViewModels::add,
             sendShowDesktopNotification = sentDesktopNotifications::addAll
@@ -292,21 +302,26 @@ internal class ServiceTest {
     @Test
     fun `User can save keywords`() {
         sut.viewLatest()
-        expectThat(savedKeywords).isEmpty()
+        expectThat(savedKeywordStoreEntries).isEmpty()
 
         sut.saveFilterKeyword("ほげ")
-        expectThat(savedKeywords).containsExactly("ほげ")
+        expectThat(savedKeywordStoreEntries.map { it.keyword() }).containsExactly("ほげ")
 
         sut.saveFilterKeyword("ふが")
-        expectThat(savedKeywords).containsExactly("ほげ", "ふが")
+        expectThat(savedKeywordStoreEntries.map { it.keyword() }).containsExactly("ほげ", "ふが")
     }
 
     @Test
     fun `User can use saved keywords to filter notifications`() {
-        savedKeywords.addAll(listOf("ほげ", "ふが"))
+        savedKeywordStoreEntries.addAll(
+            listOf(
+                FilterKeywordStoreEntryImpl("ほげ"),
+                FilterKeywordStoreEntryImpl("ふが")
+            )
+        )
         sut.viewLatest()
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
-            expectThat(it.savedKeywords).containsExactly("ほげ", "ふが")
+            expectThat(it.savedKeywords.map { e -> e.keyword() }).containsExactly("ほげ", "ふが")
         }
     }
 }
