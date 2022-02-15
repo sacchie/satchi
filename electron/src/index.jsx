@@ -23,38 +23,14 @@ import ArrowDropDownIcon from "@material-ui/icons/ArrowDropDown";
 import Input from "@material-ui/core/Input";
 
 function NotificationCard(props) {
-  const avatar = props.source.iconUrl ? (
-    <Tooltip title={props.source.name}>
-      <Avatar src={props.source.iconUrl} alt={props.source.name} />
-    </Tooltip>
-  ) : (
-    <Tooltip title={props.source.name}>
-      <Avatar alt={props.source.name} />
-    </Tooltip>
-  );
   return (
-    <Card style={props.mentioned ? { backgroundColor: "LightYellow" } : {}}>
-      <CardHeader
-        avatar={avatar}
-        title={props.title}
-        subheader={props.timestamp}
-      />
-      <CardContent>
-        <Typography variant="body2">{props.message}</Typography>
-      </CardContent>
-      <CardActions>
-        <Tooltip title="既読にする">
-          <IconButton onClick={props.onMark}>
-            <CloseIcon />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="通知を開く">
-          <IconButton onClick={props.onOpen}>
-            <OpenInBrowserIcon />
-          </IconButton>
-        </Tooltip>
-      </CardActions>
-    </Card>
+    <div>
+      {props.source.iconUrl}
+      {props.source.name}
+      {props.title}
+      {props.timestamp}
+      {props.message}
+    </div>
   );
 }
 
