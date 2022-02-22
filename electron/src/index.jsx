@@ -10,11 +10,9 @@ function NotificationCard(props) {
   );
   return (
     <Card style={props.mentioned ? { backgroundColor: "LightYellow" } : {}}>
-      <CardHeader
-        avatar={avatar}
-        title={props.title}
-        subheader={props.timestamp}
-      />
+      <CardHeader>
+        {avatar}<Text>{props.title}</Text><Text>{props.timestamp}</Text>
+      </CardHeader>
       <CardBody>
         <Text>{props.message}</Text>
       </CardBody>
@@ -170,8 +168,17 @@ function App({ client, viewModel }) {
 
   if (viewModel.stateClass === "ViewingState") {
     return (
-      <Grommet>
-        <Header position="sticky">
+      <Grommet theme={ {global: {
+         colors: {
+           brand: '#228BE6',
+        },
+          font: {
+            family: 'sans-serif',
+            size: '14px',
+          },
+        },
+      }}>
+        <Header>
             <Text tag="h1">
               satchi
             </Text>
