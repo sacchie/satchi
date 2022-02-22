@@ -1,36 +1,12 @@
 import React, { useState, useMemo, useEffect } from "react";
 import ReactDOM from "react-dom";
-import Card from "@material-ui/core/Card";
-import CardContent from "@material-ui/core/CardContent";
-import CloseIcon from "@material-ui/icons/Close";
-import CardActions from "@material-ui/core/CardActions";
-import IconButton from "@material-ui/core/IconButton";
-import OpenInBrowserIcon from "@material-ui/icons/OpenInBrowser";
-import MailIcon from "@material-ui/icons/Mail";
-import Tooltip from "@material-ui/core/Tooltip";
-import { CardHeader } from "@material-ui/core";
-import Avatar from "@material-ui/core/Avatar";
-import Typography from "@material-ui/core/Typography";
-import AppBar from "@material-ui/core/AppBar";
-import Button from "@material-ui/core/Button";
-import Toolbar from "@material-ui/core/Toolbar";
-import Menu from "@material-ui/core/Menu";
-import MenuItem from "@material-ui/core/MenuItem";
-import Checkbox from "@material-ui/core/Checkbox";
-import SearchIcon from "@material-ui/icons/Search";
-import SaveAltIcon from "@material-ui/icons/SaveAlt";
-import ArrowDropDownIcon from "@material-ui/icons/ArrowDropDown";
-import Input from "@material-ui/core/Input";
+import {Avatar,Button,Header, CheckBox,Card, CardBody, Text, Menu, TextInput, CardFooter, CardHeader, Grommet} from "grommet"
 
 function NotificationCard(props) {
   const avatar = props.source.iconUrl ? (
-    <Tooltip title={props.source.name}>
-      <Avatar src={props.source.iconUrl} alt={props.source.name} />
-    </Tooltip>
+    <Avatar src={props.source.iconUrl} alt={props.source.name} />
   ) : (
-    <Tooltip title={props.source.name}>
-      <Avatar alt={props.source.name} />
-    </Tooltip>
+    <Avatar alt={props.source.name} />
   );
   return (
     <Card style={props.mentioned ? { backgroundColor: "LightYellow" } : {}}>
@@ -39,21 +15,17 @@ function NotificationCard(props) {
         title={props.title}
         subheader={props.timestamp}
       />
-      <CardContent>
-        <Typography variant="body2">{props.message}</Typography>
-      </CardContent>
-      <CardActions>
-        <Tooltip title="既読にする">
-          <IconButton onClick={props.onMark}>
-            <CloseIcon />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="通知を開く">
-          <IconButton onClick={props.onOpen}>
-            <OpenInBrowserIcon />
-          </IconButton>
-        </Tooltip>
-      </CardActions>
+      <CardBody>
+        <Text>{props.message}</Text>
+      </CardBody>
+      <CardFooter>
+          <Button onClick={props.onMark}>
+            ✕
+          </Button>
+          <Button onClick={props.onOpen}>
+            ⤴️
+          </Button>
+      </CardFooter>
     </Card>
   );
 }
@@ -198,13 +170,12 @@ function App({ client, viewModel }) {
 
   if (viewModel.stateClass === "ViewingState") {
     return (
-      <>
-        <AppBar position="sticky">
-          <Toolbar>
-            <Typography component="h1" variant="h6" color="inherit">
+      <Grommet>
+        <Header position="sticky">
+            <Text tag="h1">
               satchi
-            </Typography>
-            <Checkbox
+            </Text>
+            <CheckBox
               checked={viewModel.stateData.isMentionOnly}
               onChange={() => client.toggleMentioned()}
               name="mention"
@@ -218,22 +189,22 @@ function App({ client, viewModel }) {
                 client.changeFilterKeyword(keyword);
               }}
             />
-            <IconButton
+            <Button
               onClick={() => {
                 client.saveFilterKeyword(keyword);
               }}
             >
-              <SaveAltIcon />
-            </IconButton>
+💾
+            </Button>
             {viewModel.stateData.savedKeywords.length > 0 && (
               <>
-                <IconButton
+                <Button
                   onClick={(event) =>
                     setKeywordSelectMenuAnchorEl(event.target)
                   }
                 >
-                  <ArrowDropDownIcon />
-                </IconButton>
+                  ⬇️
+                </Button>
                 <SavedKeywordMenu
                   anchorEl={keywordSelectMenuAnchorEl}
                   onClose={() => setKeywordSelectMenuAnchorEl(null)}
@@ -256,13 +227,12 @@ function App({ client, viewModel }) {
               count={viewModel.stateData.incomingNotificationCount}
               onClick={() => client.viewIncomingNotifications()}
             />
-          </Toolbar>
-        </AppBar>
+        </Header>
         <NotificationCardList
           notifications={viewModel.stateData.notifications}
           client={client}
         />
-      </>
+      </Grommet>
     );
   }
   return null;
@@ -289,8 +259,8 @@ function NotificationCardList({ notifications, client }) {
 function SearchBox({ value, onChange }) {
   return (
     <>
-      <SearchIcon />
-      <Input
+      🔎
+      <TextInput
         // disableUnderline
         style={{ color: "white" }}
         value={value}
@@ -309,7 +279,7 @@ function SavedKeywordMenu({
 }) {
   return (
     <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={onClose}>
-      {keywords.map((entry) => {
+      {/* {keywords.map((entry) => {
         const k = entry.keyword;
         return (
           <MenuItem
@@ -328,7 +298,7 @@ function SavedKeywordMenu({
             <Typography>{k}</Typography>
           </MenuItem>
         );
-      })}
+      })} */}
     </Menu>
   );
 }
@@ -341,10 +311,9 @@ function IncomingNotificationsButton({ count, onClick }) {
     <Button
       variant="contained"
       color="primary"
-      startIcon={<MailIcon />}
       onClick={onClick}
     >
-      {`Load ${count} incoming notifications`}
+      {`✉️ Load ${count} incoming notifications`}
     </Button>
   );
 }
