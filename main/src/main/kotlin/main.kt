@@ -125,7 +125,7 @@ class Service(
             is LoadingState -> null
             is ViewingState -> {
                 val viewingState = state as ViewingState
-                val ntfs = viewingState.gatewayStateSet.getUnread(viewingState.filterState, 100)
+                val ntfs = viewingState.gatewayStateSet.getUnread(viewingState.filterState, 30)
                     .map { ViewModel.Notification.from(it.first, it.second) }
                 ViewModel.ViewingData(
                     viewingState.filterState.isMentionOnly,
