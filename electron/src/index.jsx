@@ -269,11 +269,13 @@ function App({ client, viewModel }) {
 }
 
 function NotificationCardList({ notifications, client }) {
+  const makeKey = (n) => `${n.id}:${n.gatewayId}`
+
   // avoid re-rendering unless notifications are changed, since rendering is slow
   const cards = useMemo(
     () =>
       notifications.map((n, index) => (
-        <div key={index} style={{ padding: 5 }}>
+        <div key={makeKey(n)} style={{ padding: 5 }}>
           <NotificationCard
             {...n}
             onOpen={() => window.myAPI.openExternal(n.source.url)}
