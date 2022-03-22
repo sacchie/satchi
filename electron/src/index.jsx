@@ -191,6 +191,13 @@ function App({ client, viewModel }) {
   const [keyword, setKeyword] = useState("");
   const [keywordSelectMenuAnchorEl, setKeywordSelectMenuAnchorEl] =
     useState(null);
+  const [notifications, setNotifications] = useState([]);
+
+  useEffect(() => {
+    if (viewModel.stateClass === "ViewingState") {
+      setNotifications(viewModel.stateData.notifications);
+    }
+  }, [viewModel.stateData]);
 
   if (viewModel.stateClass === "LoadingState") {
     return <div>Loading...</div>;
@@ -259,8 +266,12 @@ function App({ client, viewModel }) {
           </Toolbar>
         </AppBar>
         <NotificationCardList
-          notifications={viewModel.stateData.notifications}
-          client={client}
+            notifications={notifications}
+            onOpen={(n) => window.myAPI.openExternal(n.source.url)}
+            onMark={(n) => {
+              setNotifications(notifications.filter((ntf) => ntf.id !== n.id || ntf.gatewayId !== n.gatewayId));
+              client.markAsRead(n.id, n.gatewayId);
+            }}
         />
       </>
     );
@@ -268,22 +279,22 @@ function App({ client, viewModel }) {
   return null;
 }
 
-function NotificationCardList({ notifications, client }) {
+function NotificationCardList({ notifications, onOpen, onMark }) {
   const makeKey = (n) => `${n.id}:${n.gatewayId}`
 
   // avoid re-rendering unless notifications are changed, since rendering is slow
   const cards = useMemo(
     () =>
-      notifications.map((n, index) => (
+      notifications.map((n) => (
         <div key={makeKey(n)} style={{ padding: 5 }}>
           <NotificationCard
             {...n}
-            onOpen={() => window.myAPI.openExternal(n.source.url)}
-            onMark={() => client.markAsRead(n.id, n.gatewayId)}
+            onOpen={() => onOpen(n)}
+            onMark={() => onMark(n)}
           />
         </div>
       )),
-    [notifications, client]
+    [notifications]
   );
   return <>{cards}</>;
 }
