@@ -54,7 +54,7 @@ internal class ServiceTest {
             )
         )
 
-        sut.viewLatest()
+        sut.initializeView()
         expectThat(sentViewModels.size).isEqualTo(2)
         expectThat(sentViewModels[0].stateClass).isEqualTo("LoadingState")
         expectThat(sentViewModels[1].stateClass).isEqualTo("ViewingState")
@@ -80,7 +80,7 @@ internal class ServiceTest {
             )
         }
 
-        sut.viewLatest()
+        sut.initializeView()
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
             expectThat(it.notifications.size).isEqualTo(100)
         }
@@ -107,7 +107,7 @@ internal class ServiceTest {
             )
         )
 
-        sut.viewLatest()
+        sut.initializeView()
         sut.markAsRead("0", "1")
         expectThat(sentViewModels.size).isEqualTo(3)
         expectThat(sentViewModels[2].stateClass).isEqualTo("ViewingState")
@@ -138,7 +138,7 @@ internal class ServiceTest {
             )
         )
 
-        sut.viewLatest()
+        sut.initializeView()
         sut.toggleMentioned()
         expectThat(sentViewModels.size).isEqualTo(3)
         expectThat(sentViewModels[2].stateClass).isEqualTo("ViewingState")
@@ -170,7 +170,7 @@ internal class ServiceTest {
             )
         )
 
-        sut.viewLatest()
+        sut.initializeView()
         expectThat(sentViewModels.size).isEqualTo(2)
         expectThat(sentViewModels[1].stateClass).isEqualTo("ViewingState")
 
@@ -194,7 +194,7 @@ internal class ServiceTest {
 
     @Test
     fun `User can receive new mentioned notifications`() {
-        sut.viewLatest()
+        sut.initializeView()
 
         mockClient.notifications = listOf(
             Notification(
@@ -229,7 +229,7 @@ internal class ServiceTest {
 
     @Test
     fun `User can notice that new notifications exist and then view the notifications`() {
-        sut.viewLatest()
+        sut.initializeView()
         mockClient.notifications = listOf(
             Notification(
                 OffsetDateTime.now(ZoneOffset.UTC),
@@ -269,7 +269,7 @@ internal class ServiceTest {
             )
         }
 
-        sut.viewLatest()
+        sut.initializeView()
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
             expectThat(it.notifications.size).isEqualTo(100)
         }
@@ -301,7 +301,7 @@ internal class ServiceTest {
 
     @Test
     fun `User can save keywords`() {
-        sut.viewLatest()
+        sut.initializeView()
         expectThat(savedKeywordStoreEntries).isEmpty()
 
         sut.saveFilterKeyword("ほげ")
@@ -319,7 +319,7 @@ internal class ServiceTest {
                 FilterKeywordStoreEntryImpl("ふが")
             )
         )
-        sut.viewLatest()
+        sut.initializeView()
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
             expectThat(it.savedKeywords.map { e -> e.keyword() }).containsExactly("ほげ", "ふが")
         }

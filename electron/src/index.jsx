@@ -84,7 +84,7 @@ function connect() {
     const client = new Client(ws);
     addListenersToWebSocket(ws, {
       onOpen: () => {
-        client.notifications();
+        client.initializeView();
       },
       onUpdateView: (viewModel) => {
         render(<App client={client} viewModel={viewModel} />);
@@ -126,10 +126,10 @@ class Client {
     this.ws = ws;
   }
 
-  notifications() {
+  initializeView() {
     this.ws.send(
       JSON.stringify({
-        op: "Notifications",
+        op: "InitializeView",
       })
     );
   }
@@ -191,11 +191,19 @@ function App({ client, viewModel }) {
   const [keyword, setKeyword] = useState("");
   const [keywordSelectMenuAnchorEl, setKeywordSelectMenuAnchorEl] =
     useState(null);
-  const [notifications, setNotifications] = useState([]);
+  const [viewingStateData, setViewingStateData] = useState(null);
 
+  // Detecting change of the view model due to WebSocket messages
   useEffect(() => {
     if (viewModel.stateClass === "ViewingState") {
-      setNotifications(viewModel.stateData.notifications);
+      const updates = {};
+      for (const [prop, value] of Object.entries(viewModel.stateData)) {
+        // ignore null-valued properties
+        if (value !== null) {
+          updates[prop] = value;
+        }
+      }
+      setViewingStateData({ ...viewingStateData, ...updates });
     }
   }, [viewModel.stateData]);
 
@@ -203,7 +211,7 @@ function App({ client, viewModel }) {
     return <div>Loading...</div>;
   }
 
-  if (viewModel.stateClass === "ViewingState") {
+  if (viewModel.stateClass === "ViewingState" && viewingStateData !== null) {
     return (
       <>
         <AppBar position="sticky">
@@ -212,7 +220,7 @@ function App({ client, viewModel }) {
               satchi
             </Typography>
             <Checkbox
-              checked={viewModel.stateData.isMentionOnly}
+              checked={viewingStateData.isMentionOnly}
               onChange={() => client.toggleMentioned()}
               name="mention"
               color="default"
@@ -232,7 +240,7 @@ function App({ client, viewModel }) {
             >
               <SaveAltIcon />
             </IconButton>
-            {viewModel.stateData.savedKeywords.length > 0 && (
+            {viewingStateData.savedKeywords.length > 0 && (
               <>
                 <IconButton
                   onClick={(event) =>
@@ -244,7 +252,7 @@ function App({ client, viewModel }) {
                 <SavedKeywordMenu
                   anchorEl={keywordSelectMenuAnchorEl}
                   onClose={() => setKeywordSelectMenuAnchorEl(null)}
-                  keywords={viewModel.stateData.savedKeywords}
+                  keywords={viewingStateData.savedKeywords}
                   onSelect={(k) => {
                     setKeyword(k);
                     client.changeFilterKeyword(k);
@@ -260,18 +268,23 @@ function App({ client, viewModel }) {
               </>
             )}
             <IncomingNotificationsButton
-              count={viewModel.stateData.incomingNotificationCount}
+              count={viewingStateData.incomingNotificationCount}
               onClick={() => client.viewIncomingNotifications()}
             />
           </Toolbar>
         </AppBar>
         <NotificationCardList
-            notifications={notifications}
-            onOpen={(n) => window.myAPI.openExternal(n.source.url)}
-            onMark={(n) => {
-              setNotifications(notifications.filter((ntf) => ntf.id !== n.id || ntf.gatewayId !== n.gatewayId));
-              client.markAsRead(n.id, n.gatewayId);
-            }}
+          notifications={viewingStateData.notifications}
+          onOpen={(n) => window.myAPI.openExternal(n.source.url)}
+          onMark={(n) => {
+            setViewingStateData({
+              ...viewingStateData,
+              notifications: viewingStateData.notifications.filter(
+                (ntf) => ntf.id !== n.id || ntf.gatewayId !== n.gatewayId
+              ),
+            });
+            client.markAsRead(n.id, n.gatewayId);
+          }}
         />
       </>
     );
@@ -280,7 +293,7 @@ function App({ client, viewModel }) {
 }
 
 function NotificationCardList({ notifications, onOpen, onMark }) {
-  const makeKey = (n) => `${n.id}:${n.gatewayId}`
+  const makeKey = (n) => `${n.id}:${n.gatewayId}`;
 
   // avoid re-rendering unless notifications are changed, since rendering is slow
   const cards = useMemo(
