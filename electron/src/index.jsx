@@ -44,7 +44,7 @@ function NotificationCard(props) {
       </CardContent>
       <CardActions>
         <Tooltip title="既読にする">
-          <IconButton onClick={props.onMark}>
+          <IconButton ref={props.markButtonRef} onClick={props.onMark}>
             <CloseIcon />
           </IconButton>
         </Tooltip>
@@ -292,24 +292,42 @@ function App({ client, viewModel }) {
   return null;
 }
 
-function NotificationCardList({ notifications, onOpen, onMark }) {
-  const makeKey = (n) => `${n.id}:${n.gatewayId}`;
+class NotificationCardList extends React.Component {
+  constructor(props) {
+    super(props);
 
-  // avoid re-rendering unless notifications are changed, since rendering is slow
-  const cards = useMemo(
-    () =>
-      notifications.map((n) => (
-        <div key={makeKey(n)} style={{ padding: 5 }}>
-          <NotificationCard
-            {...n}
-            onOpen={() => onOpen(n)}
-            onMark={() => onMark(n)}
-          />
-        </div>
-      )),
-    [notifications]
-  );
-  return <>{cards}</>;
+    this.makeKey = (n) => `${n.id}:${n.gatewayId}`;
+
+    // https://ja.reactjs.org/docs/refs-and-the-dom.html#callback-refs
+    this.markButtonEls = new Map();
+    this.setMarkButtonElement = (n, element) => {
+      this.markButtonEls.set(this.makeKey(n), element);
+    };
+  }
+
+  render() {
+    const cards = this.props.notifications.map((n, index) => (
+      <div key={this.makeKey(n)} style={{ padding: 5 }}>
+        <NotificationCard
+          {...n}
+          markButtonRef={(element) => this.setMarkButtonElement(n, element)}
+          onOpen={() => this.props.onOpen(n)}
+          onMark={() => {
+            this.markButtonEls.delete(this.makeKey(n));
+            if (index + 1 < this.props.notifications.length) {
+              const key = this.makeKey(this.props.notifications[index + 1]);
+              if (this.markButtonEls.has(key)) {
+                this.markButtonEls.get(key).focus();
+              }
+            }
+
+            this.props.onMark(n);
+          }}
+        />
+      </div>
+    ));
+    return <>{cards}</>;
+  }
 }
 
 function SearchBox({ value, onChange }) {
