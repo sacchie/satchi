@@ -68,8 +68,8 @@ internal class ServiceTest {
     }
 
     @Test
-    fun `User can view at most 100 notifications`() {
-        mockClient.notifications = (1..101).map {
+    fun `User can view at most 30 notifications`() {
+        mockClient.notifications = (1..31).map {
             Notification(
                 OffsetDateTime.now(ZoneOffset.UTC),
                 Notification.Source("source name", "https://example.com/source/url", null),
@@ -82,7 +82,7 @@ internal class ServiceTest {
 
         sut.initializeView()
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
-            expectThat(it.notifications!!.size).isEqualTo(100)
+            expectThat(it.notifications!!.size).isEqualTo(30)
         }
     }
 
@@ -109,12 +109,15 @@ internal class ServiceTest {
 
         sut.initializeView()
         sut.markAsRead("0", "1")
+        sut.viewIncomingNotifications()
+
         expectThat(sentViewModels.size).isEqualTo(3)
         expectThat(sentViewModels[2].stateClass).isEqualTo("ViewingState")
         (sentViewModels[2].stateData as ViewModel.ViewingData).let {
             expectThat(it.notifications!!.size).isEqualTo(1)
             expectThat(it.notifications!![0].id).isEqualTo("2")
         }
+        expectThat(mockClient.readNotificationIds).containsExactly("1")
     }
 
     @Test
@@ -244,7 +247,6 @@ internal class ServiceTest {
         sut.fetchToPool()
 
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
-            expectThat(it.notifications!!.size).isEqualTo(0)
             expectThat(it.incomingNotificationCount).isEqualTo(1)
         }
 
@@ -257,8 +259,8 @@ internal class ServiceTest {
     }
 
     @Test
-    fun `User can view the 101st mentioned notification`() {
-        mockClient.notifications = (1..100).map {
+    fun `User can view the 31st mentioned notification`() {
+        mockClient.notifications = (1..30).map {
             Notification(
                 OffsetDateTime.now(ZoneOffset.UTC),
                 Notification.Source("source name", "https://example.com/source/url", null),
@@ -271,7 +273,7 @@ internal class ServiceTest {
 
         sut.initializeView()
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
-            expectThat(it.notifications!!.size).isEqualTo(100)
+            expectThat(it.notifications!!.size).isEqualTo(30)
         }
 
         sut.toggleMentioned()
@@ -287,7 +289,7 @@ internal class ServiceTest {
                     "title",
                     "Hello",
                     true,
-                    "101"
+                    "31"
                 )
             ),
             ""
@@ -327,8 +329,10 @@ internal class ServiceTest {
 }
 
 private class MockClient : Client {
-    var notifications: List<Notification> = listOf()
-    var notificationsWithOffset: Pair<List<Notification>, String> = Pair(listOf(), "")
+    var notifications = listOf<Notification>()
+    var notificationsWithOffset = Pair<List<Notification>, String>(listOf(), "")
+    val readNotificationIds = mutableListOf<NotificationId>()
     override fun fetchNotifications(): List<Notification> = notifications
     override fun fetchNotificationsWithOffset(offset: String): Pair<List<Notification>, String> = notificationsWithOffset
+    override fun markAsReadExecutor(): ((id: NotificationId) -> Unit) = { readNotificationIds.add(it) }
 }
