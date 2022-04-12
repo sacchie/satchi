@@ -54,22 +54,22 @@ internal class ServiceTest {
             )
         )
 
-        sut.viewLatest()
+        sut.initializeView()
         expectThat(sentViewModels.size).isEqualTo(2)
         expectThat(sentViewModels[0].stateClass).isEqualTo("LoadingState")
         expectThat(sentViewModels[1].stateClass).isEqualTo("ViewingState")
         expectThat(sentViewModels[1].stateData).isA<ViewModel.ViewingData>()
 
         val viewingData = sentViewModels[1].stateData as ViewModel.ViewingData
-        expectThat(viewingData.notifications.size).isEqualTo(1)
-        viewingData.notifications.forEach {
+        expectThat(viewingData.notifications!!.size).isEqualTo(1)
+        viewingData.notifications!!.forEach {
             expectThat(it.message).isEqualTo("Hello")
         }
     }
 
     @Test
-    fun `User can view at most 100 notifications`() {
-        mockClient.notifications = (1..101).map {
+    fun `User can view at most 30 notifications`() {
+        mockClient.notifications = (1..31).map {
             Notification(
                 OffsetDateTime.now(ZoneOffset.UTC),
                 Notification.Source("source name", "https://example.com/source/url", null),
@@ -80,9 +80,9 @@ internal class ServiceTest {
             )
         }
 
-        sut.viewLatest()
+        sut.initializeView()
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
-            expectThat(it.notifications.size).isEqualTo(100)
+            expectThat(it.notifications!!.size).isEqualTo(30)
         }
     }
 
@@ -107,14 +107,17 @@ internal class ServiceTest {
             )
         )
 
-        sut.viewLatest()
+        sut.initializeView()
         sut.markAsRead("0", "1")
+        sut.viewIncomingNotifications()
+
         expectThat(sentViewModels.size).isEqualTo(3)
         expectThat(sentViewModels[2].stateClass).isEqualTo("ViewingState")
         (sentViewModels[2].stateData as ViewModel.ViewingData).let {
-            expectThat(it.notifications.size).isEqualTo(1)
-            expectThat(it.notifications[0].id).isEqualTo("2")
+            expectThat(it.notifications!!.size).isEqualTo(1)
+            expectThat(it.notifications!![0].id).isEqualTo("2")
         }
+        expectThat(mockClient.readNotificationIds).containsExactly("1")
     }
 
     @Test
@@ -138,14 +141,14 @@ internal class ServiceTest {
             )
         )
 
-        sut.viewLatest()
+        sut.initializeView()
         sut.toggleMentioned()
         expectThat(sentViewModels.size).isEqualTo(3)
         expectThat(sentViewModels[2].stateClass).isEqualTo("ViewingState")
         (sentViewModels[2].stateData as ViewModel.ViewingData).let {
             expectThat(it.isMentionOnly).isTrue()
-            expectThat(it.notifications.size).isEqualTo(1)
-            expectThat(it.notifications[0].id).isEqualTo("1")
+            expectThat(it.notifications!!.size).isEqualTo(1)
+            expectThat(it.notifications!![0].id).isEqualTo("1")
         }
     }
 
@@ -170,7 +173,7 @@ internal class ServiceTest {
             )
         )
 
-        sut.viewLatest()
+        sut.initializeView()
         expectThat(sentViewModels.size).isEqualTo(2)
         expectThat(sentViewModels[1].stateClass).isEqualTo("ViewingState")
 
@@ -178,8 +181,8 @@ internal class ServiceTest {
         expectThat(sentViewModels.size).isEqualTo(3)
         expectThat(sentViewModels[2].stateClass).isEqualTo("ViewingState")
         (sentViewModels[2].stateData as ViewModel.ViewingData).let {
-            expectThat(it.notifications.size).isEqualTo(1)
-            expectThat(it.notifications[0].id).isEqualTo("2")
+            expectThat(it.notifications!!.size).isEqualTo(1)
+            expectThat(it.notifications!![0].id).isEqualTo("2")
         }
 
         sut.changeFilterKeyword(" World\t")
@@ -188,13 +191,13 @@ internal class ServiceTest {
         sut.changeFilterKeyword(" ")
         expectThat(sentViewModels.size).isEqualTo(4)
         (sentViewModels[3].stateData as ViewModel.ViewingData).let {
-            expectThat(it.notifications.size).isEqualTo(2)
+            expectThat(it.notifications!!.size).isEqualTo(2)
         }
     }
 
     @Test
     fun `User can receive new mentioned notifications`() {
-        sut.viewLatest()
+        sut.initializeView()
 
         mockClient.notifications = listOf(
             Notification(
@@ -229,7 +232,7 @@ internal class ServiceTest {
 
     @Test
     fun `User can notice that new notifications exist and then view the notifications`() {
-        sut.viewLatest()
+        sut.initializeView()
         mockClient.notifications = listOf(
             Notification(
                 OffsetDateTime.now(ZoneOffset.UTC),
@@ -244,21 +247,20 @@ internal class ServiceTest {
         sut.fetchToPool()
 
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
-            expectThat(it.notifications.size).isEqualTo(0)
             expectThat(it.incomingNotificationCount).isEqualTo(1)
         }
 
         sut.viewIncomingNotifications()
 
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
-            expectThat(it.notifications.size).isEqualTo(1)
+            expectThat(it.notifications!!.size).isEqualTo(1)
             expectThat(it.incomingNotificationCount).isEqualTo(0)
         }
     }
 
     @Test
-    fun `User can view the 101st mentioned notification`() {
-        mockClient.notifications = (1..100).map {
+    fun `User can view the 31st mentioned notification`() {
+        mockClient.notifications = (1..30).map {
             Notification(
                 OffsetDateTime.now(ZoneOffset.UTC),
                 Notification.Source("source name", "https://example.com/source/url", null),
@@ -269,14 +271,14 @@ internal class ServiceTest {
             )
         }
 
-        sut.viewLatest()
+        sut.initializeView()
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
-            expectThat(it.notifications.size).isEqualTo(100)
+            expectThat(it.notifications!!.size).isEqualTo(30)
         }
 
         sut.toggleMentioned()
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
-            expectThat(it.notifications.size).isEqualTo(0)
+            expectThat(it.notifications!!.size).isEqualTo(0)
         }
 
         mockClient.notificationsWithOffset = Pair(
@@ -287,7 +289,7 @@ internal class ServiceTest {
                     "title",
                     "Hello",
                     true,
-                    "101"
+                    "31"
                 )
             ),
             ""
@@ -295,13 +297,13 @@ internal class ServiceTest {
         sut.fetchBack()
 
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
-            expectThat(it.notifications.size).isEqualTo(1)
+            expectThat(it.notifications!!.size).isEqualTo(1)
         }
     }
 
     @Test
     fun `User can save keywords`() {
-        sut.viewLatest()
+        sut.initializeView()
         expectThat(savedKeywordStoreEntries).isEmpty()
 
         sut.saveFilterKeyword("ほげ")
@@ -319,16 +321,18 @@ internal class ServiceTest {
                 FilterKeywordStoreEntryImpl("ふが")
             )
         )
-        sut.viewLatest()
+        sut.initializeView()
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
-            expectThat(it.savedKeywords.map { e -> e.keyword() }).containsExactly("ほげ", "ふが")
+            expectThat(it.savedKeywords!!.map { e -> e.keyword() }).containsExactly("ほげ", "ふが")
         }
     }
 }
 
 private class MockClient : Client {
-    var notifications: List<Notification> = listOf()
-    var notificationsWithOffset: Pair<List<Notification>, String> = Pair(listOf(), "")
+    var notifications = listOf<Notification>()
+    var notificationsWithOffset = Pair<List<Notification>, String>(listOf(), "")
+    val readNotificationIds = mutableListOf<NotificationId>()
     override fun fetchNotifications(): List<Notification> = notifications
     override fun fetchNotificationsWithOffset(offset: String): Pair<List<Notification>, String> = notificationsWithOffset
+    override fun markAsReadExecutor(): ((id: NotificationId) -> Unit) = { readNotificationIds.add(it) }
 }

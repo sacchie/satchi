@@ -19,7 +19,7 @@ const val MAIN_URL = "http://localhost:8037"
 
 data class InMessage(val op: OpType, val args: Map<String, Object>?) {
     enum class OpType {
-        Notifications, MarkAsRead, ToggleMentioned, ChangeFilterKeyword, SaveFilterKeyword, ChangeKeywordSelectionForDesktopNotification,
+        InitializeView, MarkAsRead, ToggleMentioned, ChangeFilterKeyword, SaveFilterKeyword, ChangeKeywordSelectionForDesktopNotification,
         ViewIncomingNotifications
     }
 }
@@ -141,7 +141,27 @@ class Service(
         sendUpdateView(viewModel)
     }
 
-    fun viewLatest() {
+    fun onChangeTriggeringIncomingNotificationCountUpdate() {
+        val data: Any? = when (state) {
+            is NullState -> return
+            is LoadingState -> return
+            is ViewingState -> {
+                val viewingState = state as ViewingState
+                ViewModel.ViewingData(
+                    null,
+                    null,
+                    null,
+                    viewingState.gatewayStateSet.getPoolCount()
+                )
+            }
+            else -> throw RuntimeException()
+        }
+
+        val viewModel = ViewModel(state.javaClass.simpleName, data)
+        sendUpdateView(viewModel)
+    }
+
+    fun initializeView() {
         synchronized(state) {
             state = LoadingState()
             onChangeTriggeringViewUpdate()
@@ -167,7 +187,6 @@ class Service(
                     notificationId,
                     gateways[gatewayId]!!.client
                 )
-                onChangeTriggeringViewUpdate()
             }
         }
 
@@ -186,7 +205,7 @@ class Service(
                 val gatewayState = state.gatewayStateSet.getState(gatewayId)
                 main.notificationlist.fetchToPool(gatewayState.getAccessorForNotificationList(), gateway.client)
                 System.err.println("Updating NotificationHolder")
-                onChangeTriggeringViewUpdate()
+                onChangeTriggeringIncomingNotificationCountUpdate()
             }
         }
     }
@@ -304,7 +323,7 @@ fun main() {
             ws.onMessage { ctx ->
                 val msg = mapper.readValue(ctx.message(), InMessage::class.java)
                 when (msg.op) {
-                    InMessage.OpType.Notifications -> service.viewLatest()
+                    InMessage.OpType.InitializeView -> service.initializeView()
                     InMessage.OpType.MarkAsRead ->
                         service.markAsRead(
                             msg.args!!["gatewayId"].toString(),

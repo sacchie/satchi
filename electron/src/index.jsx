@@ -44,7 +44,7 @@ function NotificationCard(props) {
       </CardContent>
       <CardActions>
         <Tooltip title="既読にする">
-          <IconButton onClick={props.onMark}>
+          <IconButton ref={props.markButtonRef} onClick={props.onMark}>
             <CloseIcon />
           </IconButton>
         </Tooltip>
@@ -84,7 +84,7 @@ function connect() {
     const client = new Client(ws);
     addListenersToWebSocket(ws, {
       onOpen: () => {
-        client.notifications();
+        client.initializeView();
       },
       onUpdateView: (viewModel) => {
         render(<App client={client} viewModel={viewModel} />);
@@ -126,10 +126,10 @@ class Client {
     this.ws = ws;
   }
 
-  notifications() {
+  initializeView() {
     this.ws.send(
       JSON.stringify({
-        op: "Notifications",
+        op: "InitializeView",
       })
     );
   }
@@ -191,12 +191,27 @@ function App({ client, viewModel }) {
   const [keyword, setKeyword] = useState("");
   const [keywordSelectMenuAnchorEl, setKeywordSelectMenuAnchorEl] =
     useState(null);
+  const [viewingStateData, setViewingStateData] = useState(null);
+
+  // Detecting change of the view model due to WebSocket messages
+  useEffect(() => {
+    if (viewModel.stateClass === "ViewingState") {
+      const updates = {};
+      for (const [prop, value] of Object.entries(viewModel.stateData)) {
+        // ignore null-valued properties
+        if (value !== null) {
+          updates[prop] = value;
+        }
+      }
+      setViewingStateData({ ...viewingStateData, ...updates });
+    }
+  }, [viewModel.stateData]);
 
   if (viewModel.stateClass === "LoadingState") {
     return <div>Loading...</div>;
   }
 
-  if (viewModel.stateClass === "ViewingState") {
+  if (viewModel.stateClass === "ViewingState" && viewingStateData !== null) {
     return (
       <>
         <AppBar position="sticky">
@@ -205,7 +220,7 @@ function App({ client, viewModel }) {
               satchi
             </Typography>
             <Checkbox
-              checked={viewModel.stateData.isMentionOnly}
+              checked={viewingStateData.isMentionOnly}
               onChange={() => client.toggleMentioned()}
               name="mention"
               color="default"
@@ -225,7 +240,7 @@ function App({ client, viewModel }) {
             >
               <SaveAltIcon />
             </IconButton>
-            {viewModel.stateData.savedKeywords.length > 0 && (
+            {viewingStateData.savedKeywords.length > 0 && (
               <>
                 <IconButton
                   onClick={(event) =>
@@ -237,7 +252,7 @@ function App({ client, viewModel }) {
                 <SavedKeywordMenu
                   anchorEl={keywordSelectMenuAnchorEl}
                   onClose={() => setKeywordSelectMenuAnchorEl(null)}
-                  keywords={viewModel.stateData.savedKeywords}
+                  keywords={viewingStateData.savedKeywords}
                   onSelect={(k) => {
                     setKeyword(k);
                     client.changeFilterKeyword(k);
@@ -253,14 +268,23 @@ function App({ client, viewModel }) {
               </>
             )}
             <IncomingNotificationsButton
-              count={viewModel.stateData.incomingNotificationCount}
+              count={viewingStateData.incomingNotificationCount}
               onClick={() => client.viewIncomingNotifications()}
             />
           </Toolbar>
         </AppBar>
         <NotificationCardList
-          notifications={viewModel.stateData.notifications}
-          client={client}
+          notifications={viewingStateData.notifications}
+          onOpen={(n) => window.myAPI.openExternal(n.source.url)}
+          onMark={(n) => {
+            setViewingStateData({
+              ...viewingStateData,
+              notifications: viewingStateData.notifications.filter(
+                (ntf) => ntf.id !== n.id || ntf.gatewayId !== n.gatewayId
+              ),
+            });
+            client.markAsRead(n.id, n.gatewayId);
+          }}
         />
       </>
     );
@@ -268,24 +292,42 @@ function App({ client, viewModel }) {
   return null;
 }
 
-function NotificationCardList({ notifications, client }) {
-  const makeKey = (n) => `${n.id}:${n.gatewayId}`
+class NotificationCardList extends React.Component {
+  constructor(props) {
+    super(props);
 
-  // avoid re-rendering unless notifications are changed, since rendering is slow
-  const cards = useMemo(
-    () =>
-      notifications.map((n, index) => (
-        <div key={makeKey(n)} style={{ padding: 5 }}>
-          <NotificationCard
-            {...n}
-            onOpen={() => window.myAPI.openExternal(n.source.url)}
-            onMark={() => client.markAsRead(n.id, n.gatewayId)}
-          />
-        </div>
-      )),
-    [notifications, client]
-  );
-  return <>{cards}</>;
+    this.makeKey = (n) => `${n.id}:${n.gatewayId}`;
+
+    // https://ja.reactjs.org/docs/refs-and-the-dom.html#callback-refs
+    this.markButtonEls = new Map();
+    this.setMarkButtonElement = (n, element) => {
+      this.markButtonEls.set(this.makeKey(n), element);
+    };
+  }
+
+  render() {
+    const cards = this.props.notifications.map((n, index) => (
+      <div key={this.makeKey(n)} style={{ padding: 5 }}>
+        <NotificationCard
+          {...n}
+          markButtonRef={(element) => this.setMarkButtonElement(n, element)}
+          onOpen={() => this.props.onOpen(n)}
+          onMark={() => {
+            this.markButtonEls.delete(this.makeKey(n));
+            if (index + 1 < this.props.notifications.length) {
+              const key = this.makeKey(this.props.notifications[index + 1]);
+              if (this.markButtonEls.has(key)) {
+                this.markButtonEls.get(key).focus();
+              }
+            }
+
+            this.props.onMark(n);
+          }}
+        />
+      </div>
+    ));
+    return <>{cards}</>;
+  }
 }
 
 function SearchBox({ value, onChange }) {

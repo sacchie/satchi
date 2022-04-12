@@ -4,7 +4,7 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 
 data class ViewModel(val stateClass: String, val stateData: Any?) {
-    data class ViewingData(val isMentionOnly: Boolean, val notifications: List<Notification>, val savedKeywords: List<FilterKeywordStore.Entry>, val incomingNotificationCount: Int)
+    data class ViewingData(val isMentionOnly: Boolean?, val notifications: List<Notification>?, val savedKeywords: List<FilterKeywordStore.Entry>?, val incomingNotificationCount: Int?)
 
     data class Notification(
         val timestamp: LocalDateTime,
