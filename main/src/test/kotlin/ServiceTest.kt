@@ -61,8 +61,8 @@ internal class ServiceTest {
         expectThat(sentViewModels[1].stateData).isA<ViewModel.ViewingData>()
 
         val viewingData = sentViewModels[1].stateData as ViewModel.ViewingData
-        expectThat(viewingData.notifications.size).isEqualTo(1)
-        viewingData.notifications.forEach {
+        expectThat(viewingData.notifications!!.size).isEqualTo(1)
+        viewingData.notifications!!.forEach {
             expectThat(it.message).isEqualTo("Hello")
         }
     }
@@ -82,7 +82,7 @@ internal class ServiceTest {
 
         sut.initializeView()
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
-            expectThat(it.notifications.size).isEqualTo(100)
+            expectThat(it.notifications!!.size).isEqualTo(100)
         }
     }
 
@@ -112,8 +112,8 @@ internal class ServiceTest {
         expectThat(sentViewModels.size).isEqualTo(3)
         expectThat(sentViewModels[2].stateClass).isEqualTo("ViewingState")
         (sentViewModels[2].stateData as ViewModel.ViewingData).let {
-            expectThat(it.notifications.size).isEqualTo(1)
-            expectThat(it.notifications[0].id).isEqualTo("2")
+            expectThat(it.notifications!!.size).isEqualTo(1)
+            expectThat(it.notifications!![0].id).isEqualTo("2")
         }
     }
 
@@ -144,8 +144,8 @@ internal class ServiceTest {
         expectThat(sentViewModels[2].stateClass).isEqualTo("ViewingState")
         (sentViewModels[2].stateData as ViewModel.ViewingData).let {
             expectThat(it.isMentionOnly).isTrue()
-            expectThat(it.notifications.size).isEqualTo(1)
-            expectThat(it.notifications[0].id).isEqualTo("1")
+            expectThat(it.notifications!!.size).isEqualTo(1)
+            expectThat(it.notifications!![0].id).isEqualTo("1")
         }
     }
 
@@ -178,8 +178,8 @@ internal class ServiceTest {
         expectThat(sentViewModels.size).isEqualTo(3)
         expectThat(sentViewModels[2].stateClass).isEqualTo("ViewingState")
         (sentViewModels[2].stateData as ViewModel.ViewingData).let {
-            expectThat(it.notifications.size).isEqualTo(1)
-            expectThat(it.notifications[0].id).isEqualTo("2")
+            expectThat(it.notifications!!.size).isEqualTo(1)
+            expectThat(it.notifications!![0].id).isEqualTo("2")
         }
 
         sut.changeFilterKeyword(" World\t")
@@ -188,7 +188,7 @@ internal class ServiceTest {
         sut.changeFilterKeyword(" ")
         expectThat(sentViewModels.size).isEqualTo(4)
         (sentViewModels[3].stateData as ViewModel.ViewingData).let {
-            expectThat(it.notifications.size).isEqualTo(2)
+            expectThat(it.notifications!!.size).isEqualTo(2)
         }
     }
 
@@ -244,14 +244,14 @@ internal class ServiceTest {
         sut.fetchToPool()
 
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
-            expectThat(it.notifications.size).isEqualTo(0)
+            expectThat(it.notifications!!.size).isEqualTo(0)
             expectThat(it.incomingNotificationCount).isEqualTo(1)
         }
 
         sut.viewIncomingNotifications()
 
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
-            expectThat(it.notifications.size).isEqualTo(1)
+            expectThat(it.notifications!!.size).isEqualTo(1)
             expectThat(it.incomingNotificationCount).isEqualTo(0)
         }
     }
@@ -271,12 +271,12 @@ internal class ServiceTest {
 
         sut.initializeView()
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
-            expectThat(it.notifications.size).isEqualTo(100)
+            expectThat(it.notifications!!.size).isEqualTo(100)
         }
 
         sut.toggleMentioned()
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
-            expectThat(it.notifications.size).isEqualTo(0)
+            expectThat(it.notifications!!.size).isEqualTo(0)
         }
 
         mockClient.notificationsWithOffset = Pair(
@@ -295,7 +295,7 @@ internal class ServiceTest {
         sut.fetchBack()
 
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
-            expectThat(it.notifications.size).isEqualTo(1)
+            expectThat(it.notifications!!.size).isEqualTo(1)
         }
     }
 
@@ -321,7 +321,7 @@ internal class ServiceTest {
         )
         sut.initializeView()
         (sentViewModels.last().stateData as ViewModel.ViewingData).let {
-            expectThat(it.savedKeywords.map { e -> e.keyword() }).containsExactly("ほげ", "ふが")
+            expectThat(it.savedKeywords!!.map { e -> e.keyword() }).containsExactly("ほげ", "ふが")
         }
     }
 }
