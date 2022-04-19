@@ -78,16 +78,33 @@ function render(component) {
   ReactDOM.render(component, document.getElementById("app"));
 }
 
-function connect() {
+function cleanUpReactComponent() {
+  ReactDOM.unmountComponentAtNode(document.getElementById("app"));
+}
+
+function connect(onStartGame) {
   function doConnect() {
     const ws = new WebSocket("ws://localhost:8037/connect");
     const client = new Client(ws);
+    let closeByGameStart = false;
+
+    function cleanUpReactAndStartGame() {
+      closeByGameStart = true;
+      ws.close();
+    }
+
     addListenersToWebSocket(ws, {
       onOpen: () => {
         client.initializeView();
       },
       onUpdateView: (viewModel) => {
-        render(<App client={client} viewModel={viewModel} />);
+        render(
+          <App
+            client={client}
+            viewModel={viewModel}
+            onStartGame={cleanUpReactAndStartGame}
+          />
+        );
       },
       onShowDesktopNotification: (ntf) => {
         new Notification(ntf.title, {
@@ -97,6 +114,12 @@ function connect() {
         };
       },
       onClose: (e) => {
+        if (closeByGameStart) {
+          cleanUpReactComponent();
+          onStartGame();
+          return;
+        }
+
         let timeToReconnect = 5 + 1;
         const timer = setInterval(() => {
           timeToReconnect--;
@@ -187,7 +210,7 @@ class Client {
   }
 }
 
-function App({ client, viewModel }) {
+function App({ client, viewModel, onStartGame }) {
   const [keyword, setKeyword] = useState("");
   const [keywordSelectMenuAnchorEl, setKeywordSelectMenuAnchorEl] =
     useState(null);
@@ -273,6 +296,7 @@ function App({ client, viewModel }) {
             />
           </Toolbar>
         </AppBar>
+        <Button onClick={onStartGame}>Switch to game</Button>
         <NotificationCardList
           notifications={viewingStateData.notifications}
           onOpen={(n) => window.myAPI.openExternal(n.source.url)}
@@ -406,4 +430,10 @@ function ConnectionClosed(props) {
   );
 }
 
-connect();
+//
+
+function startGame() {
+  document.getElementById("app").innerText = "Hello game";
+}
+
+connect(startGame);
