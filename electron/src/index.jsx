@@ -21,6 +21,7 @@ import SearchIcon from "@material-ui/icons/Search";
 import SaveAltIcon from "@material-ui/icons/SaveAlt";
 import ArrowDropDownIcon from "@material-ui/icons/ArrowDropDown";
 import Input from "@material-ui/core/Input";
+import * as game from "./game";
 
 function NotificationCard(props) {
   const avatar = props.source.iconUrl ? (
@@ -433,7 +434,7 @@ function ConnectionClosed(props) {
 //
 
 function startGame() {
-  document.getElementById("app").innerText = "Hello game";
+  game.start(document.getElementById("app"));
 }
 
 connect(startGame);

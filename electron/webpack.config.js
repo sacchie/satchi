@@ -10,7 +10,8 @@ module.exports = {
     index: "./src/index.jsx",
   },
 
-  target: "electron-renderer",
+  // https://qiita.com/umamichi/items/8781e426e9cd4a88961b
+  target: "web",
 
   output: {
     path: path.join(__dirname, "app", "compiled"),
