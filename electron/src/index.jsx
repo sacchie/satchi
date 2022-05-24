@@ -128,14 +128,14 @@ function connect(onStartGame) {
             <ConnectionClosed
               onReconnect={() => {
                 clearInterval(timer);
-                connect();
+                connect(onStartGame);
               }}
               timeToReconnect={timeToReconnect}
             />
           );
           if (timeToReconnect === 0) {
             clearInterval(timer);
-            connect();
+            connect(onStartGame);
           }
         }, 1000);
       },
