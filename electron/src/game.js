@@ -7,63 +7,55 @@ install({ ShaderSystem });
 // const renderer = new Renderer();
 
 export function start(el) {
-  const app = new PIXI.Application({ backgroundColor: 0x1099bb });
+  const app = new PIXI.Application({ backgroundColor: 0xffffff });
   el.appendChild(app.view);
 
-  const basicText = new PIXI.Text("Basic text in pixi");
-  basicText.x = 50;
-  basicText.y = 100;
+  const wallRect = new PIXI.Graphics();
+  const WALL_LX = 0;
+  const WALL_TY = 0;
+  const WALL_RX = 300;
+  const WALL_BY = 400;
+  wallRect.drawRect(WALL_LX, WALL_TY, WALL_RX, WALL_BY);
+  wallRect.lineStyle(2, 0x000000);
+  app.stage.addChild(wallRect);
 
-  app.stage.addChild(basicText);
+  const r = 5.0;
+  const ball = new PIXI.Graphics();
+  ball.beginFill(0xff0000);
+  ball.drawCircle(0, 0, r);
+  ball.position.x = 100.0;
+  ball.position.y = 100.0;
+  app.stage.addChild(ball);
+  let v = { x: 7.0, y: 5.0 };
 
-  const style = new PIXI.TextStyle({
-    fontFamily: "Arial",
-    fontSize: 36,
-    fontStyle: "italic",
-    fontWeight: "bold",
-    fill: ["#ffffff", "#00ff99"], // gradient
-    stroke: "#4a1850",
-    strokeThickness: 5,
-    dropShadow: true,
-    dropShadowColor: "#000000",
-    dropShadowBlur: 4,
-    dropShadowAngle: Math.PI / 6,
-    dropShadowDistance: 6,
-    wordWrap: true,
-    wordWrapWidth: 440,
-    lineJoin: "round",
-  });
+  animate();
+  function animate() {
+    requestAnimationFrame(animate);
+    const dx = v.x;
+    const dy = v.y;
+    if (ball.x + dx > WALL_RX) {
+      // hit right wall
+      v.x = -v.x;
+    } else if (ball.x + dx < WALL_LX) {
+      // hit left wall
+      v.x = -v.x;
+    } else {
+      // no hit
+    }
 
-  const richText = new PIXI.Text(
-    "Rich text with a lot of options and across multiple lines",
-    style
-  );
-  richText.x = 50;
-  richText.y = 220;
+    if (ball.y + dy > WALL_BY) {
+      // hit bottom wall
+      v.y = -v.y;
+    } else if (ball.y + dy < WALL_TY) {
+      // hit top wall
+      v.y = -v.y;
+    } else {
+      // no hit
+    }
 
-  app.stage.addChild(richText);
+    ball.x += v.x;
+    ball.y += v.y;
 
-  const skewStyle = new PIXI.TextStyle({
-    fontFamily: "Arial",
-    dropShadow: true,
-    dropShadowAlpha: 0.8,
-    dropShadowAngle: 2.1,
-    dropShadowBlur: 4,
-    dropShadowColor: "0x111111",
-    dropShadowDistance: 10,
-    fill: ["#ffffff"],
-    stroke: "#004620",
-    fontSize: 60,
-    fontWeight: "lighter",
-    lineJoin: "round",
-    strokeThickness: 12,
-  });
-
-  const skewText = new PIXI.Text("SKEW IS COOL", skewStyle);
-  skewText.skew.set(0.65, -0.3);
-  skewText.anchor.set(0.5, 0.5);
-  skewText.x = 300;
-  skewText.y = 480;
-
-  app.stage.addChild(skewText);
+    app.render(app.stage);
+  }
 }
