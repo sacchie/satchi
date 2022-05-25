@@ -19,7 +19,7 @@ dependencies {
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.12.5")
     implementation("org.slf4j:slf4j-simple:1.7.30")
     implementation("com.rometools:rome:1.16.0")
-    implementation("org.junit.jupiter:junit-jupiter:5.7.0")
+    implementation("org.junit.jupiter:junit-jupiter:5.8.2")
     testImplementation("io.strikt:strikt-core:0.32.0")
 }
 
