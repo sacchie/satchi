@@ -24,7 +24,9 @@
   "dependencies": {
     "@material-ui/core": "^4.11.4",
     "@material-ui/icons": "^4.11.2",
+    "@pixi/unsafe-eval": "^6.3.0",
     "electron": "^12.0.2",
+    "pixi.js": "^6.3.0",
     "react": "^17.0.2",
     "react-dom": "^17.0.2"
   }
