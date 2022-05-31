@@ -6,7 +6,63 @@ install({ ShaderSystem });
 
 // const renderer = new Renderer();
 
+class Paddle {
+  constructor(width, height, velocity) {
+    this.width = width;
+    this.height = height;
+    this.velocity = velocity;
+  }
+}
+
+class Ball {
+  constructor(radius) {
+    this.radius = radius;
+  }
+}
+
+function moveBall(ballPosition, ballVelocity, WALL_LX, WALL_TY, WALL_RX, WALL_BY) {
+  const dx = ballVelocity.x;
+  const dy = ballVelocity.y;
+  if (ballPosition.x + dx > WALL_RX) {
+    // hit right wall
+    ballVelocity.x *= -0.9;
+  } else if (ballPosition.x + dx < WALL_LX) {
+    // hit left wall
+    ballVelocity.x *= -0.9;
+  } else {
+    // no hit
+  }
+
+  if (ballPosition.y + dy > WALL_BY) {
+    // hit bottom wall
+    ballVelocity.y *= -0.9;
+  } else if (ballPosition.y + dy < WALL_TY) {
+    // hit top wall
+    ballVelocity.y *= -0.9;
+  } else {
+    // no hit
+  }
+
+  ballPosition.x += ballVelocity.x;
+  ballPosition.y += ballVelocity.y;
+
+  ballVelocity.y += 0.1;
+}
+
 export function start(el) {
+  const state = {
+    paddle: {
+      pixi: null
+    },
+    ball: {
+      pixi: null,
+      velocity: {
+        x: null,
+        y: null
+      }
+    }
+  }
+
   const app = new PIXI.Application({
     width: 300,
     height: 400,
@@ -23,66 +79,38 @@ export function start(el) {
   wallRect.drawRect(WALL_LX, WALL_TY, WALL_RX, WALL_BY);
   app.stage.addChild(wallRect);
 
-  const paddleWidth = 20;
-  const paddleHeight = 5;
-  const paddle = new PIXI.Graphics();
-  paddle.lineStyle(2,  0x000000);
-  paddle.drawRect(10, 350, paddleWidth, paddleHeight);
-  app.stage.addChild(paddle);
+  const paddle = new Paddle(20, 5, 5);
+  state.paddle.pixi = new PIXI.Graphics();
+  state.paddle.pixi.lineStyle(2,  0x000000);
+  state.paddle.pixi.drawRect(10, 350, paddle.width, paddle.height);
+  app.stage.addChild(state.paddle.pixi);
 
-  const r = 5.0;
-  const ball = new PIXI.Graphics();
-  ball.beginFill(0xff0000);
-  ball.drawCircle(0, 0, r);
-  ball.position.x = 100.0;
-  ball.position.y = 100.0;
-  app.stage.addChild(ball);
-  let v = { x: 7.0, y: 0.0 };
+  const ball = new Ball(5.0);
+  state.ball.velocity.x = 7.0;
+  state.ball.velocity.y = 0.0;
+  state.ball.pixi = new PIXI.Graphics();
+  state.ball.pixi.beginFill(0xff0000);
+  state.ball.pixi.drawCircle(0, 0, ball.radius);
+  state.ball.pixi.position.x = 100.0;
+  state.ball.pixi.position.y = 100.0;
+  app.stage.addChild(state.ball.pixi);
 
   animate();
   function animate() {
     requestAnimationFrame(animate);
-    const dx = v.x;
-    const dy = v.y;
-    if (ball.x + dx > WALL_RX) {
-      // hit right wall
-      v.x = -0.9 * v.x;
-    } else if (ball.x + dx < WALL_LX) {
-      // hit left wall
-      v.x = -0.9 * v.x;
-    } else {
-      // no hit
-    }
-
-    if (ball.y + dy > WALL_BY) {
-      // hit bottom wall
-      v.y = -0.9 * v.y;
-    } else if (ball.y + dy < WALL_TY) {
-      // hit top wall
-      v.y = -0.9 * v.y;
-    } else {
-      // no hit
-    }
-
-    ball.x += v.x;
-    ball.y += v.y;
-
-    v.y += 0.1;
-
+    moveBall(state.ball.pixi.position, state.ball.velocity, WALL_LX, WALL_TY, WALL_RX, WALL_BY);
     app.render(app.stage);
   }
 
   document.addEventListener('keydown', onKeyDown);
 
   function onKeyDown(key) {
-    const paddleVelocity = 5;
-
     if (key.keyCode === 37) {
       // Left arrow is 37
-      paddle.position.x -= paddleVelocity;
+      state.paddle.pixi.position.x -= paddle.velocity
     } else if (key.keyCode === 39) {
       // Right arrow is 39
-      paddle.position.x += paddleVelocity;
+      state.paddle.pixi.position.x += paddle.velocity;
     }
   }
 }
