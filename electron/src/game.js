@@ -7,7 +7,11 @@ install({ ShaderSystem });
 // const renderer = new Renderer();
 
 export function start(el) {
-  const app = new PIXI.Application({ backgroundColor: 0xffffff });
+  const app = new PIXI.Application({
+    width: 300,
+    height: 400,
+    backgroundColor: 0xffffff
+  });
   el.appendChild(app.view);
 
   const wallRect = new PIXI.Graphics();
@@ -18,6 +22,13 @@ export function start(el) {
   wallRect.lineStyle(2, 0x000000);
   wallRect.drawRect(WALL_LX, WALL_TY, WALL_RX, WALL_BY);
   app.stage.addChild(wallRect);
+
+  const paddleWidth = 20;
+  const paddleHeight = 5;
+  const paddle = new PIXI.Graphics();
+  paddle.lineStyle(2,  0x000000);
+  paddle.drawRect(10, 350, paddleWidth, paddleHeight);
+  app.stage.addChild(paddle);
 
   const r = 5.0;
   const ball = new PIXI.Graphics();
@@ -59,5 +70,19 @@ export function start(el) {
     v.y += 0.1;
 
     app.render(app.stage);
+  }
+
+  document.addEventListener('keydown', onKeyDown);
+
+  function onKeyDown(key) {
+    const paddleVelocity = 5;
+
+    if (key.keyCode === 37) {
+      // Left arrow is 37
+      paddle.position.x -= paddleVelocity;
+    } else if (key.keyCode === 39) {
+      // Right arrow is 39
+      paddle.position.x += paddleVelocity;
+    }
   }
 }
